@@ -138,7 +138,9 @@ gcode:
 
 ## Box temperature & humidity sensor
 
-The Qidi Box has a AHT20_F temperature sensor, which unfortunately is not compatible with the stock AHT10 or AHT20 drivers available in Klipper and will crash in some scenarios. Use the modified file provided here
+The Qidi Box has a AHT20_F temperature sensor, which unfortunately is not compatible with the stock AHT10 or AHT20 drivers available in Klipper and will crash in some scenarios. Use the [modified file provided here](aht20_f.py).
+If you are on Qidi's Klipper, no further action is necessary.
+If you are on stock or other Klipper, you need to add [aht20_f] to your `klipper/klippy/extras/temperature_sensors.cfg`.
 
 ## Slicer settings
 
