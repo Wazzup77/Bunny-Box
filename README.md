@@ -1,18 +1,13 @@
 # Happy-Hare-Plus4-Configs
 
 ## ISSUES / TODO
-* Macros are WIP:
-    * ENABLE / DISABLE_ALL_SENSORS not working
-    * RESUME and RESUME_PRINT macros needs to be reworked for HH 
-    * saved variables need to be reworked
-    * better handling / testing of different cases and errors
-* configs in general are still WIP (definitely needs some tuning)
-* no LED signalling
-* probably more
+* cannot eject from Happy Hare UI
+* error handling could be improved I guess
+* should mostylu be fine, but report issues
 
 ## Happy Hare install
 
-1. Copy the configs (mmu folder, box_hh.cfg and box_macros.cfg).
+1. Copy the configs (`mmu` folder and `bunnybox_macros.cfg`).
 
 2. Install Happy Hare from the [WIP Plus4 repo](https://github.com/Wazzup77/Happy-Hare).
 
@@ -26,16 +21,16 @@ If you're modifying the files for development purposes you will need to rerun th
 
 1. Remove Qidi's stock box config include `[include box.cfg]`
 
-2. Add `[include box_hh.cfg]` at the top.
+2. Add `[include bunnybox_macros.cfg]` at the top.
 
-3. Remove the `[hall_filament_width_sensor]` section
+3. Remove the `[hall_filament_width_sensor]` section. It is now defined and configured via Happy Hare.
 
-4. Make sure Happy Hare files were included during install: `[include mmu/base/*.cfg]` & `[include mmu/optional/client_macros.cfg]`
+4. Make sure Happy Hare files were included during install: `[include mmu/base/*.cfg]`.
 
 ## `[gcode_macro.cfg]` changes
 
 1. In PRINT_START we need to change Box detection logic:
-```bash
+```diff
 [gcode_macro PRINT_START]
 gcode:
 [...]
@@ -50,7 +45,7 @@ gcode:
         {% endfor %}
         SAVE_VARIABLE VARIABLE=extrude_state VALUE=-1
 -        {% if printer.save_variables.variables.enable_box == 1 %}
-+        {% if printer.mmu.enabled == 1 %}
++        {% if printer.mmu.enabled %}
             BOX_PRINT_START EXTRUDER={extruder} HOTENDTEMP={hotendtemp}
             M400
             EXTRUSION_AND_FLUSH HOTEND={hotendtemp}
@@ -58,27 +53,92 @@ gcode:
 [...]
 ```
 
-2. In ENABLE_ALL_SENSOR AND DISABLE_ALL_SENSOR
-```
-[gcode_macro ENABLE_ALL_SENSOR]
+2. In `PAUSE`
+```diff
+[gcode_macro PAUSE]
+rename_existing: BASE_PAUSE
 gcode:
-    ENABLE_FILAMENT_WIDTH_SENSOR
-    RESET_FILAMENT_WIDTH_SENSOR
-    query_filament_width
-    SET_FILAMENT_SENSOR SENSOR=fila ENABLE=1
--    {% if printer["filament_motion_sensor box_motion_sensor"] and printer.save_variables.variables.enable_box == 1 %}
-        CLEAR_MOTION_DATA
-        SET_FILAMENT_SENSOR SENSOR=box_motion_sensor ENABLE=1
-    {% endif %}
 
-[gcode_macro DISABLE_ALL_SENSOR]
-gcode:
-    SET_FILAMENT_SENSOR SENSOR=fila ENABLE=0
--    {% if printer["filament_motion_sensor box_motion_sensor"] %}
-        SET_FILAMENT_SENSOR SENSOR=box_motion_sensor ENABLE=0
-    {% endif %}
-    DISABLE_FILAMENT_WIDTH_SENSOR
+(...)
+
+        SET_IDLE_TIMEOUT TIMEOUT=86400
+        SET_STEPPER_ENABLE STEPPER=extruder enable=0
+-        {% set slot_sync = printer.save_variables.variables.slot_sync|default("slot-1") %}
+-        {% if printer['box_stepper ' ~ slot_sync] %}
+-            SET_STEPPER_ENABLE STEPPER='box_stepper '{slot_sync} enable=0
++        {% if printer.mmu.sync_drive %}
++            {% set slot_sync = printer.mmu.tool|default("-1") %}
++            {% if printer.mmu.tool == 0 %}
++                SET_STEPPER_ENABLE STEPPER='stepper_mmu_gear' enable=0
++            {% elif printer.mmu.tool > 0 %}
++                SET_STEPPER_ENABLE STEPPER=('stepper_mmu_gear_' ~ {slot_sync}) enable=0
+        {% endif %}
 ```
+
+3. In `RESUME_PRINT`
+
+```diff
+[gcode_macro RESUME_PRINT]
+    
+    (...)
+
+    {% if printer['pause_resume'].is_paused|int == 1 %}
+-        {% if printer.save_variables.variables.box_count >= 1 and printer.save_variables.variables.enable_box == 1 and printer.save_variables.variables.is_tool_change == 1%} 
++        {% if printer.mmu.num_gates >= 4 and if printer.mmu.enabled == True and printer.save_variables.variables.is_tool_change == 1%} 
+            SET_IDLE_TIMEOUT TIMEOUT={printer.configfile.settings.idle_timeout.timeout}
+            MOVE_TO_TRASH
+            {% if etemp > 0 %}
+                M109 S{etemp|int}
+            {% endif %}
+            M83
+            RESTORE_GCODE_STATE NAME=PAUSEPARK2 MOVE=1 MOVE_SPEED=200                            
+            RESTORE_GCODE_STATE NAME=PAUSE MOVE=1 MOVE_SPEED=15
+            BASE_RESUME  
+        {% else %}
+            SET_IDLE_TIMEOUT TIMEOUT={printer.configfile.settings.idle_timeout.timeout}
+            {% if etemp > 0 %}
+                M109 S{etemp|int}
+            {% endif %}
+-            {% if printer.save_variables.variables.box_count >= 1 %} 
++            {% if printer.mmu.num_gates >= 4 %} 
+                SAVE_VARIABLE VARIABLE=retry_step VALUE=None
+            {% endif %}
+    
+    (...)
+```
+
+4. In `RESUME`
+
+```diff
+[gcode_macro RESUME]
+rename_existing: BASE_RESUME
+gcode:    
+    {% if printer['pause_resume'].is_paused|int == 1 %}
+-        {% if printer.save_variables.variables.box_count >= 1 %} 
++        {% if printer.mmu.num_gates >= 4 %} 
+-            {% if printer.save_variables.variables.enable_box == 1 %}
++            {% if printer.mmu.enabled %}
+                TRY_RESUME_PRINT
+            {% else %}
+                {% if printer['hall_filament_width_sensor'].Diameter > 0.5 %}
+                    RESUME_PRINT
+                {% else %}
+                    M118 Printer resume failed
+                {% endif %}
+            {% endif %}
+        {% else %}
+            {% if printer['hall_filament_width_sensor'].Diameter > 0.5 %}
+                RESUME_PRINT
+            {% else %}
+                M118 Printer resume failed
+            {% endif %}
+        {% endif %}
+    {% endif %}
+```
+
+## Box temperature & humidity sensor
+
+The Qidi Box has a AHT20_F temperature sensor, which unfortunately is not compatible with the stock AHT10 or AHT20 drivers available in Klipper and will crash in some scenarios. Use the modified file provided here
 
 ## Slicer settings
 
@@ -94,3 +154,7 @@ Refer to the [Happy Hare documentation](https://github.com/moggieuk/Happy-Hare/w
 If you want to have a section in your printer web interface, install baseline fluidd or mainsail, which both have HH implemented.
 
 [Happy Hare docs](https://github.com/moggieuk/Happy-Hare/wiki)
+
+## ADVANCED USERS ONLY
+
+Happy Hare allows for a lot of configuration - we will place interesting options and more install steps here.
