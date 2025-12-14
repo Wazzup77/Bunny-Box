@@ -1,4 +1,7 @@
 
+
+# TODO - COPIED FROM PLUS4
+
 ## INSTALLATION
 
 ### AUTO INSTALLATION
@@ -195,7 +198,7 @@ Alternatively you can also install Mainsail instead of Fluidd.
 ### SLICER SETTINGS
 
 None! The mod is intended to be transparent for the slicer. If your gcode works with a stock Plus4, it should work with Happy Hare. 
-Tested on Orca Slicer using the [following g-codes](Plus4\slicer_machine_gcodes.md), which are meant to replicate the Qidi Slicer profile.
+Tested on Orca Slicer using the [following g-codes](TODO), which are meant to replicate the Qidi Slicer profile.
 
 ## ADDITIONAL HELP
 

@@ -1,6 +1,6 @@
 # Bunny Box - the Qidi Box Happy Hare conversion
 
-## Features
+## FEATURES
 
  * Open source alternative to Qidi's Box control (
     * No more .so files (you can update Python again)
@@ -19,7 +19,7 @@
  NOT SUPPORTED:
  * RFID tags - maybe in the future, but honestly who cares?
 
-## Development status
+## DEVELOPMENT STATUS
 
  * Happy Hare - the Qidi fork has been developed and tested, but not yet pulled into mainline. You can find it [here](https://github.com/Wazzup77/Happy-Hare).
  * Plus4 - in beta, configs are available [here](Plus4), tested on 1.7.3.
@@ -35,6 +35,6 @@
 
 If you run into issues please report them in the issue tracker here. We are also on Qidi's Discord server [in a dedicated thread](https://discord.com/channels/1184400034641477722/1443579858679500822) if you want to chat.
 
-## Additional help
+## ADDITIONAL HELP
 
 Refer to the [Happy Hare documentation](https://github.com/moggieuk/Happy-Hare/wiki).
