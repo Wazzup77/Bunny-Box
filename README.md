@@ -5,7 +5,9 @@
 * error handling could be improved I guess
 * should mostylu be fine, but report issues
 
-## Happy Hare install
+## Installation
+
+### Happy Hare install
 
 1. Copy the configs (`mmu` folder and `bunnybox_macros.cfg`).
 
@@ -27,7 +29,7 @@ If you're modifying the files for development purposes you will need to rerun th
 
 4. Make sure Happy Hare files were included during install: `[include mmu/base/*.cfg]`.
 
-## `[gcode_macro.cfg]` changes
+### `[gcode_macro.cfg]` changes
 
 1. In PRINT_START we need to change Box detection logic:
 ```diff
@@ -136,13 +138,23 @@ gcode:
     {% endif %}
 ```
 
-## Box temperature & humidity sensor
+### Box temperature & humidity sensor
 
-The Qidi Box has a AHT20_F temperature sensor, which unfortunately is not compatible with the stock AHT10 or AHT20 drivers available in Klipper and will crash in some scenarios. Use the [modified file provided here](aht20_f.py).
+The Qidi Box has a AHT20_F temperature sensor, which unfortunately is not compatible with the stock AHT10 or AHT20 drivers available in Klipper and will crash in some scenarios. Use the [modified file provided here](aht20_f.py). Simply SSH into your printer and do:
+
+```bash
+cd /home/pi/klipper/klippy/extras
+
+cp aht20_f.py aht20_f.py.bak
+
+wget https://raw.githubusercontent.com/Wazzup77/Happy-Hare-Plus4-Configs/main/aht20_f.py
+```
+
 If you are on Qidi's Klipper, no further action is necessary.
+
 If you are on stock or other Klipper, you need to add [aht20_f] to your `klipper/klippy/extras/temperature_sensors.cfg`.
 
-## Slicer settings
+### Slicer settings
 
 None! The mod is intended to be transparent for the slicer. If your gcode works with a stock Plus4, it should work with Happy Hare. 
 Tested on Orca Slicer using the [following g-codes](https://github.com/Wazzup77/Happy-Hare-Plus4-Configs/blob/main/slicer_machine_gcodes.md), which are meant to replicate the Qidi Slicer profile.
