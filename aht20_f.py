@@ -25,8 +25,8 @@ AHT20_F_COMMANDS = {
 
 AHT20_F_MAX_BUSY_CYCLES= 5
 
-class AHT20_F:
-    def __init__(self, config):
+class AHT20_base:
+    def __init__(self, config, type):
         self.printer = config.get_printer()
         self.name = config.get_name().split()[-1]
         self.reactor = self.printer.get_reactor()
@@ -35,7 +35,7 @@ class AHT20_F:
         self.report_time = config.getfloat('aht20_f_report_time',0.1,minval=0.1)
         self.temp = self.min_temp = self.max_temp = self.humidity = 0.
         self.sample_timer = self.reactor.register_timer(self._sample_aht20_f)
-        self.printer.add_object("aht10 " + self.name, self)
+        self.printer.add_object(type + " " + self.name, self)
         self.printer.register_event_handler("klippy:connect",
                                             self.handle_connect)
         self.gcode = gcode = self.printer.lookup_object('gcode')
@@ -219,8 +219,16 @@ class AHT20_F:
             'humidity': self.humidity,
         }
 
+class AHT20_F(AHT20_base):
+    def __init__(self, config):
+        super().__init__(config, "aht20_f")
+
+class AHT20_BB(AHT20_base):
+    def __init__(self, config):
+        super().__init__(config, "aht10")
 
 def load_config(config):
     # Register sensor
     pheater = config.get_printer().lookup_object("heaters")
     pheater.add_sensor_factory("AHT20_F", AHT20_F)
+    pheater.add_sensor_factory("AHT20_BB", AHT20_BB)
