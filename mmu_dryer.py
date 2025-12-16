@@ -87,7 +87,20 @@ class FilamentDryer:
             self.gcode.respond_info("Filament drying cycle complete!")
             self._stop_drying()
             return self.reactor.NEVER
-        
+        # Send status update every 5 minutes to reset idle timeout and inform user
+        if int(eventtime - self.start_time) % 300 == 0:  # Every 5 minutes
+            remaining_hours = remaining / 3600.0
+            elapsed_hours = (eventtime - self.start_time) / 3600.0
+            progress = ((eventtime - self.start_time) / self.duration) * 100.0
+            
+            heater = self._get_heater()
+            current_temp = heater.get_status(eventtime).get('temperature', 0)
+            
+            msg = ("Drying: %.1f°C | %.1f%% complete | "
+                   "%.1fh elapsed | %.1fh remaining" 
+                   % (current_temp, progress, elapsed_hours, remaining_hours))
+            self.gcode.run_script_from_command("M118 " + msg)                        
+
         # Continue timer
         return eventtime + 1.0
     
@@ -244,4 +257,5 @@ class FilamentDryer:
 
 def load_config(config):
     return FilamentDryer(config)
+
 
