@@ -12,25 +12,39 @@ TODO - installer script will be made available in the future.
 
 1. Copy the configs (`mmu` folder and `bunnybox_macros.cfg`).
 
-2. Install Happy Hare from the [WIP Plus4 repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
+2. Add your printer's serial address to `mmu/base/mmu.cfg`. To do this, connect to your printer via SSH and run:
+
+```bash
+ls /dev/serial/by-id/*
+```
+
+This will give you a list of USB devices. It should say something like:
+
+```bash
+/dev/serial/by-id/usb-Klipper_QIDI_BOX_V1_1.1.1_xxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Copy that into your mmu.cfg in the `serial:` parameter, replacing the old value.
+
+3. Install Happy Hare from the [WIP Plus4 repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
 
 ```bash
 git clone https://github.com/Wazzup77/Happy-Hare.git
 ```
 
-3. Run the install script `Happy-Hare/install.sh` and pray that it does not break stuff.
+4. Run the install script `Happy-Hare/install.sh` and pray that it does not break stuff.
 
 ```bash
 ./Happy-Hare/install.sh
 ```
 
-4. Add `mmu__revision = 0` to `saved_variables.cfg'
+5. Add `mmu__revision = 0` to `saved_variables.cfg'
 
 ```bash
 echo "mmu__revision = 0" >> printer_data/config/saved_variables.cfg
 ```
 
-5. Restart Klipper
+6. Restart Klipper
 
 ```bash
 sudo service klipper restart
@@ -108,8 +122,8 @@ gcode:
     (...)
 
     {% if printer['pause_resume'].is_paused|int == 1 %}
--        {% if printer.save_variables.variables.box_count >= 1 and printer.save_variables.variables.enable_box == 1 and printer.save_variables.variables.is_tool_change == 1%} 
-+        {% if printer.mmu.num_gates >= 4 and if printer.mmu.enabled == True and printer.save_variables.variables.is_tool_change == 1%} 
+-        {% if printer.save_variables.variables.box_count >= 1 and printer.save_variables.variables.enable_box == 1 and printer.save_variables.variables.is_tool_change == 1 %} 
++        {% if printer.mmu.num_gates >= 4 and printer.mmu.enabled and printer.save_variables.variables.is_tool_change == 1 %} 
             SET_IDLE_TIMEOUT TIMEOUT={printer.configfile.settings.idle_timeout.timeout}
             MOVE_TO_TRASH
             {% if etemp > 0 %}
