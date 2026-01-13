@@ -29,7 +29,7 @@ Copy that into your mmu.cfg in the `serial:` parameter, replacing the old value.
 3. Install Happy Hare from the [WIP repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
 
 ```bash
-git clone https://github.com/Wazzup77/Happy-Hare.git
+git clone -b bunnybox https://github.com/Wazzup77/Happy-Hare.git
 ```
 
 4. Run the install script `Happy-Hare/install.sh` and pray that it does not break stuff.
