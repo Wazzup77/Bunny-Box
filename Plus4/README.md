@@ -10,9 +10,14 @@ TODO - installer script will be made available in the future.
 <details>
 <summary> HAPPY HARE INSTALL </summary>
 
-1. Copy the configs (`mmu` folder and `bunnybox_macros.cfg`).
+1. Select your config variant. At present, you can select from:
 
-2. Add your printer's serial address to `mmu/base/mmu.cfg`. To do this, connect to your printer via SSH and run:
+- [`config_qidi-like`](./config_qidi-like/README.md) - Qidi's stock box config, aiming to be as close to stock as possible and compatible with stock Qidi Box gcode
+- [`config_hh-standalone`](./config_hh-standalone/README.md) - Happy Hare focused config, taking advantage of its features for a more Happy-Hare experience
+
+2. Copy the configs (`mmu` folder and `bunnybox_macros.cfg`) from the selected variant to your printer's config folder.
+
+3. Add your printer's serial address to `mmu/base/mmu.cfg`. To do this, connect to your printer via SSH and run:
 
 ```bash
 ls /dev/serial/by-id/*
@@ -26,25 +31,25 @@ This will give you a list of USB devices. It should say something like:
 
 Copy that into your mmu.cfg in the `serial:` parameter, replacing the old value.
 
-3. Install Happy Hare from the [WIP repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
+4. Install Happy Hare from the [WIP repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
 
 ```bash
 git clone https://github.com/Wazzup77/Happy-Hare.git
 ```
 
-4. Run the install script `Happy-Hare/install.sh` and pray that it does not break stuff.
+5. Run the install script `Happy-Hare/install.sh` and pray that it does not break stuff.
 
 ```bash
 ./Happy-Hare/install.sh
 ```
 
-5. Add `mmu__revision = 0` to `saved_variables.cfg'
+6. Add `mmu__revision = 0` to `saved_variables.cfg'
 
 ```bash
 echo "mmu__revision = 0" >> printer_data/config/saved_variables.cfg
 ```
 
-6. Restart Klipper
+7. Restart Klipper
 
 ```bash
 sudo service klipper restart
@@ -74,8 +79,8 @@ measurement_delay: 50
 enable: false
 measurement_interval: 10
 logging: False
-min_diameter: 0.3
-use_current_dia_while_delay: False
+-min_diameter: 0.3
+-use_current_dia_while_delay: False
 -pause_on_runout:True
 -runout_gcode:
 -            RESET_FILAMENT_WIDTH_SENSOR
@@ -88,7 +93,7 @@ use_current_dia_while_delay: False
 -pause_delay: 0.5
 ```
 
-4. Make sure Happy Hare files were included during install: `[include mmu/base/*.cfg]`.
+4. Make sure Happy Hare files were included during install in printer.cfg: `[include mmu/base/*.cfg]`.
 
 </details>
 
@@ -257,3 +262,5 @@ Refer to the [Happy Hare documentation](https://github.com/moggieuk/Happy-Hare/w
 ## ADVANCED USERS ONLY
 
 Happy Hare allows for a lot of configuration - we will place interesting options and more install steps here.
+
+- [Happy Hare Standalone](hh-standalone) - focused on using Happy Hare to the best of its ability - at the cost of being incompatible with stock Qidi gcode.

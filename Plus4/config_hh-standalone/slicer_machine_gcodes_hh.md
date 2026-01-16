@@ -1,9 +1,11 @@
 # MACHINE START G-CODE
 ```
+MMU_START_SETUP INITIAL_TOOL={initial_tool} TOTAL_TOOLCHANGES=!total_toolchanges! REFERENCED_TOOLS=!referenced_tools! TOOL_COLORS=!colors! TOOL_TEMPS=!temperatures! TOOL_MATERIALS=!materials! FILAMENT_NAMES=!filament_names! PURGE_VOLUMES=!purge_volumes!
+MMU_START_CHECK
 PRINT_START BED=[bed_temperature_initial_layer_single] HOTEND=[nozzle_temperature_initial_layer] CHAMBER=[chamber_temperature] EXTRUDER=[initial_no_support_extruder]
 SET_PRINT_STATS_INFO TOTAL_LAYER=[total_layer_count]
 M83
-T[initial_tool]
+MMU_START_LOAD_INITIAL_TOOL
 M140 S[bed_temperature_initial_layer_single]
 M104 S[nozzle_temperature_initial_layer]
 M141 S[chamber_temperature]
@@ -20,10 +22,11 @@ G1 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0) + 
 G1 Y{max((min(print_bed_max[1] - 3, first_layer_print_min[1] + 80) - 85), 0) + 3} E{82 * 0.5 * initial_layer_print_height * nozzle_diameter[0]} F3000
 G1 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0) + 3} Z0
 G1 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0) + 6}
-G1 Z1 F600
 ;Alternatively use KAMP purge line
 ;LINE_PURGE
+G1 Z1 F600
 SET_PRINT_STATS_INFO CURRENT_LAYER=1
+SET_PRINT_STATS_INFO TOTAL_LAYER={total_layer_count}
 ```
 
 # MACHINE END G-CODE
@@ -35,7 +38,6 @@ M140 S0
 DISABLE_ALL_SENSOR
 G1 E-3 F1800
 G0 Z{max_layer_z + 3} F600
-UNLOAD_FILAMENT T=[current_extruder]
 G0 Y290 F12000
 G0 X90 Y290 F12000
 {if max_layer_z < max_print_height / 2}G1 Z{max_print_height / 2 + 10} F600{else}G1 Z{min(max_print_height, max_layer_z + 3)}{endif}
