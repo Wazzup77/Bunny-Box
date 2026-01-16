@@ -1,0 +1,99 @@
+# MACHINE START G-CODE
+```
+MMU_START_SETUP INITIAL_TOOL={initial_tool} TOTAL_TOOLCHANGES=!total_toolchanges! REFERENCED_TOOLS=!referenced_tools! TOOL_COLORS=!colors! TOOL_TEMPS=!temperatures! TOOL_MATERIALS=!materials! FILAMENT_NAMES=!filament_names! PURGE_VOLUMES=!purge_volumes!
+MMU_START_CHECK
+PRINT_START BED=[bed_temperature_initial_layer_single] HOTEND=[nozzle_temperature_initial_layer] CHAMBER=[chamber_temperature] EXTRUDER=[initial_no_support_extruder]
+SET_PRINT_STATS_INFO TOTAL_LAYER=[total_layer_count]
+M83
+MMU_START_LOAD_INITIAL_TOOL
+M140 S[bed_temperature_initial_layer_single]
+M104 S[nozzle_temperature_initial_layer]
+M141 S[chamber_temperature]
+G4 P3000
+G0 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0)} Y{max((min(print_bed_max[1] - 3, first_layer_print_min[1] + 80) - 85), 0)} Z5 F6000
+G0 Z[initial_layer_print_height] F600
+G1 E3 F1800
+;Qidi purge line
+G1 X{(min(print_bed_max[0] - 12, first_layer_print_min[0] + 80))} E{85 * 0.5 * initial_layer_print_height * nozzle_diameter[0]} F3000
+G1 Y{max((min(print_bed_max[1] - 3, first_layer_print_min[1] + 80) - 85), 0) + 2} E{2 * 0.5 * initial_layer_print_height * nozzle_diameter[0]} F3000
+G1 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0)} E{85 * 0.5 * initial_layer_print_height * nozzle_diameter[0]} F3000
+G1 Y{max((min(print_bed_max[1] - 3, first_layer_print_min[1] + 80) - 85), 0) + 85} E{83 * 0.5 * initial_layer_print_height * nozzle_diameter[0]} F3000
+G1 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0) + 2} E{2 * 0.5 * initial_layer_print_height * nozzle_diameter[0]} F3000
+G1 Y{max((min(print_bed_max[1] - 3, first_layer_print_min[1] + 80) - 85), 0) + 3} E{82 * 0.5 * initial_layer_print_height * nozzle_diameter[0]} F3000
+G1 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0) + 3} Z0
+G1 X{max((min(print_bed_max[0] - 12, first_layer_print_min[0] + 80) - 85), 0) + 6}
+;Alternatively use KAMP purge line
+;LINE_PURGE
+G1 Z1 F600
+SET_PRINT_STATS_INFO CURRENT_LAYER=1
+SET_PRINT_STATS_INFO TOTAL_LAYER={total_layer_count}
+```
+
+# MACHINE END G-CODE
+```
+MMU_END
+DISABLE_BOX_HEATER
+M141 S0
+M140 S0
+DISABLE_ALL_SENSOR
+G1 E-3 F1800
+G0 Z{max_layer_z + 3} F600
+G0 Y290 F12000
+G0 X90 Y290 F12000
+{if max_layer_z < max_print_height / 2}G1 Z{max_print_height / 2 + 10} F600{else}G1 Z{min(max_print_height, max_layer_z + 3)}{endif}
+M104 S0
+```
+# BEFORE LAYER CHANGE G-CODE
+```
+;BEFORE_LAYER_CHANGE
+;[layer_z]
+G92 E0
+```
+
+# LAYER CHANGE G-CODE
+```
+{if timelapse_type == 1} ; timelapse with wipe tower
+G92 E0
+G1 E-[retraction_length] F1800
+G2 Z{layer_z + 0.4} I0.86 J0.86 P1 F20000 ; spiral lift a little
+G1 Y304 F20000
+G1 X95 F20000
+G92 E0
+M400
+TIMELAPSE_TAKE_FRAME
+G1 Y324 F5000
+G1 E[retraction_length] F300
+G1 X65 F5000
+G1 Y290 F20000
+{elsif timelapse_type == 0} ; timelapse without wipe tower
+TIMELAPSE_TAKE_FRAME
+{endif}
+_MMU_UPDATE_HEIGHT HEIGHT={layer_num + 1} 
+G92 E0
+SET_PRINT_STATS_INFO CURRENT_LAYER={layer_num + 1}
+```
+
+# TIME LAPSE G-CODE
+```
+TIMELAPSE_TAKE_FRAME
+```
+
+# CHANGE FILAMENT G-CODE
+```
+T[next_extruder]
+```
+
+# CHANGE EXTRUSION ROLE G-CODE
+```
+
+```
+
+# PAUSE G-CODE
+```
+M0
+```
+
+# TEMPLATE CUSTOM G-CODE
+```
+
+```
