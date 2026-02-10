@@ -1,4 +1,23 @@
 # MACHINE START G-CODE
+
+Possible to modify - the general idea is:
+```
+*****CONCEPTUAL - DO NOT COPY WITHOUT MODIFICATION*****
+
+MMU_START_SETUP INITIAL_TOOL={initial_tool} TOTAL_TOOLCHANGES=!total_toolchanges! REFERENCED_TOOLS=!referenced_tools! TOOL_COLORS=!colors! TOOL_TEMPS=!temperatures! TOOL_MATERIALS=!materials! FILAMENT_NAMES=!filament_names! PURGE_VOLUMES=!purge_volumes!
+MMU_START_CHECK
+
+; your homing, preheating, leveling, etc goes here
+; nothing that requires filament in the extruder though!
+
+MMU_START_LOAD_INITIAL_TOOL
+
+; your purging logic goes here
+
+SET_PRINT_STATS_INFO CURRENT_LAYER=1
+SET_PRINT_STATS_INFO TOTAL_LAYER={total_layer_count}
+```
+
 ```
 MMU_START_SETUP INITIAL_TOOL={initial_tool} TOTAL_TOOLCHANGES=!total_toolchanges! REFERENCED_TOOLS=!referenced_tools! TOOL_COLORS=!colors! TOOL_TEMPS=!temperatures! TOOL_MATERIALS=!materials! FILAMENT_NAMES=!filament_names! PURGE_VOLUMES=!purge_volumes!
 MMU_START_CHECK

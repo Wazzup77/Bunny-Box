@@ -7,12 +7,14 @@ TODO - installer script will be made available in the future.
 
 ### MANUAL INSTALLATION
 
+
+#### HAPPY HARE INSTALLATION
 <details>
 <summary> HAPPY HARE INSTALL </summary>
 
 1. Select your config variant. At present, you can select from:
 
-- [`config_qidi-like`](./config_qidi-like/README.md) - Qidi's stock box config, aiming to be as close to stock as possible and compatible with stock Qidi Box gcode
+- NOT CURRENTLY WORKING [`config_qidi-like`](./config_qidi-like/README.md) - Qidi's stock box config, aiming to be as close to stock as possible and compatible with stock Qidi Box gcode
 - [`config_hh-standalone`](./config_hh-standalone/README.md) - Happy Hare focused config, taking advantage of its features for a more Happy-Hare experience
 
 2. Copy the configs (`mmu` folder and `bunnybox_macros.cfg`) from the selected variant to your printer's config folder.
@@ -56,6 +58,7 @@ sudo service klipper restart
 ```
 </details>
 
+#### printer.cfg CHANGES
 
 <details>
 <summary> `[printer.cfg]` CHANGES </summary>
@@ -93,9 +96,11 @@ logging: False
 -pause_delay: 0.5
 ```
 
-4. Make sure Happy Hare files were included during install in printer.cfg: `[include mmu/base/*.cfg]`.
+4. Make sure Happy Hare files were included during install in printer.cfg: `[include mmu/base/*.cfg]`. Other mmu directories should not be included!
 
 </details>
+
+#### gcode_macro.cfg CHANGES
 
 <details>
 <summary> `[gcode_macro.cfg]` CHANGES </summary>
@@ -208,6 +213,9 @@ gcode:
 ```
 </details>
 
+
+#### BOX TEMPERATURE AND HUMIDITY SENSOR
+
 <details>
 <summary> BOX TEMPERATURE & HUMIDITY SENSOR </summary>
 
@@ -216,16 +224,37 @@ The Qidi Box has a AHT20_F temperature sensor, which unfortunately is not compat
 ```bash
 cd /home/mks/klipper/klippy/extras
 
-cp aht20_f.py aht20_f.py.bak
+cp aht20_f.py aht20_f.py.bak # It's OK if this fails
 
 wget https://raw.githubusercontent.com/Wazzup77/Happy-Hare-Plus4-Configs/main/aht20_f.py
 ```
 
 If you are on Qidi's Klipper, no further action is necessary.
 
-If you are on stock or other Klipper, you need to add [aht20_bb] to your `klipper/klippy/extras/temperature_sensors.cfg`.
+If you are on stock or other Klipper, you need to add [aht20_f] to your `klipper/klippy/extras/temperature_sensors.cfg`, like so:
+
+```bash
+########################################
+# Module loading
+########################################
+
+# other sensors here...
+
+[aht10] # other sensors here
+
+# Load "AHT20_F" and "AHT20_BB" sensors via our aht20_f.py modified module
+[aht20_f]
+
+# other sensors here...
+
+########################################
+# Default thermistors
+########################################
+```
 
 </details>
+
+#### USER INTERFACE
 
 <details>
 <summary> USER INTERFACE </summary>
@@ -254,6 +283,12 @@ Alternatively you can also install Mainsail instead of Fluidd.
 
 None! The mod is intended to be transparent for the slicer. If your gcode works with a stock Plus4, it should work with Happy Hare. 
 Tested on Orca Slicer using the [following g-codes](slicer_machine_gcodes.md), which are meant to replicate the Qidi Slicer profile.
+
+## ADDITIONAL TUNING
+
+1. Speed! The default Qidi profile is very slow. You can speed it up by increasing the values in the SPEEDS section in mmu_parameters.cfg. Keep in mind that these settings will vary between different Qidi Boxes. Generally loading speeds can be increased by 20-30% without issues, but keep in mind that going fast may cause filament swaps to fail. Going too fast may also cause the filament to be ground up by the gears. Remember to recalibrate the encoder after changing speeds (its measurement will vary widely depending on speed).
+2. Tip forming. The base configuration uses simple tip forming, i.e. it removes molten filament from the nozzle. Although it has been tested on multiple filaments across multiple Plus4 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Cutter support is not implemented yet, but is planned.
+3. 
 
 ## ADDITIONAL HELP
 

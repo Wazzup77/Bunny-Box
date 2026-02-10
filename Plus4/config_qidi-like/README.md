@@ -1,4 +1,7 @@
-# HH STANDALONE
+# QIDI-LIKE HAPPY HARE
+
+[!WARNING]
+
 
 The goal of this config is to have a configuration as close to stock Qidi Box as possible - being transparent for the slicer, screen and other components. In this manner we can use the Box with minimal changes outside of installation of Happy Hare.
 
@@ -14,5 +17,5 @@ Work in progress - not ready yet, use at your own risk.
 
 2. Replace your mmu folder with the one in this folder.
 
-3. In the slicer, set your profile to use the machine gcodes [following g-codes](slicer_machine_gcodes_hh.md)
+3. In the slicer, set your profile to use the machine gcodes [following g-codes](slicer_machine_gcodes_ql.md)
 
