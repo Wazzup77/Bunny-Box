@@ -290,6 +290,11 @@ Tested on Orca Slicer using the [following g-codes](slicer_machine_gcodes.md), w
 2. Tip forming. The base configuration uses simple tip forming, i.e. it removes molten filament from the nozzle. Although it has been tested on multiple filaments across multiple Plus4 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Cutter support is not implemented yet, but is planned.
 3. 
 
+## FREQUENTLY ASKED QUESTIONS
+
+TODO
+
+
 ## ADDITIONAL HELP
 
 Refer to the [Happy Hare documentation](https://github.com/moggieuk/Happy-Hare/wiki).

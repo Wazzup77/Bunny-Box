@@ -10,8 +10,9 @@ Gcodes for this config differ from Qidi's stock box gcode. Do not use old Qidi B
 Working - issues should be minor.
 
 Known issues:
-- cutter not working properly with the Happy Hare unload sequence - use tip forming
-- ...probably more, let me know via issues.
+- none!
+
+Report new issues via the Github "Issues" tab.
 
 ## INSTALLATION
 
