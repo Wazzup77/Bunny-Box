@@ -1,14 +1,14 @@
 
-## INSTALLATION
+# INSTALLATION
 
-### AUTO INSTALLATION
+## AUTO INSTALLATION
 
 TODO - installer script will be made available in the future.
 
-### MANUAL INSTALLATION
+## MANUAL INSTALLATION
 
 
-#### HAPPY HARE INSTALLATION
+### HAPPY HARE INSTALLATION
 <details>
 <summary> HAPPY HARE INSTALL </summary>
 
@@ -58,7 +58,7 @@ sudo service klipper restart
 ```
 </details>
 
-#### printer.cfg CHANGES
+### printer.cfg CHANGES
 
 <details>
 <summary> `[printer.cfg]` CHANGES </summary>
@@ -100,7 +100,7 @@ logging: False
 
 </details>
 
-#### gcode_macro.cfg CHANGES
+### gcode_macro.cfg CHANGES
 
 <details>
 <summary> `[gcode_macro.cfg]` CHANGES </summary>
@@ -214,7 +214,7 @@ gcode:
 </details>
 
 
-#### BOX TEMPERATURE AND HUMIDITY SENSOR
+### BOX TEMPERATURE AND HUMIDITY SENSOR
 
 <details>
 <summary> BOX TEMPERATURE & HUMIDITY SENSOR </summary>
@@ -254,7 +254,7 @@ If you are on stock or other Klipper, you need to add [aht20_f] to your `klipper
 
 </details>
 
-#### USER INTERFACE
+### USER INTERFACE
 
 <details>
 <summary> USER INTERFACE </summary>
@@ -279,22 +279,23 @@ Alternatively you can also install Mainsail instead of Fluidd.
 
 </details>
 
-## SLICER SETTINGS
+# SLICER SETTINGS
 
 None! The mod is intended to be transparent for the slicer. If your gcode works with a stock Plus4, it should work with Happy Hare. 
 Tested on Orca Slicer using the [following g-codes](slicer_machine_gcodes.md), which are meant to replicate the Qidi Slicer profile.
 
-## ADDITIONAL TUNING
+# ADDITIONAL TUNING
 
 1. Speed! The default Qidi profile is very slow. You can speed it up by increasing the values in the SPEEDS section in mmu_parameters.cfg. Keep in mind that these settings will vary between different Qidi Boxes. Generally loading speeds can be increased by 20-30% without issues, but keep in mind that going fast may cause filament swaps to fail. Going too fast may also cause the filament to be ground up by the gears. Remember to recalibrate the encoder after changing speeds (its measurement will vary widely depending on speed).
-2. Tip forming. The base configuration uses simple tip forming, i.e. it removes molten filament from the nozzle. Although it has been tested on multiple filaments across multiple Plus4 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Cutter support is not implemented yet, but is planned.
-3. 
+2. Tip forming. The base configuration uses the cutter. Tip forming allows you to reduce filament waste by removing the whole filament piece from the hotend. The disadvantage is that good tuning is needed to avoid clogs. Although the profile in these configs has been tested on multiple filaments across multiple Plus4 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Activate it by changing: 
+`form_tip_macro: _MMU_CUT_TIP` to `form_tip_macro: _MMU_FORM_TIP`
 
-## ADDITIONAL HELP
+
+# ADDITIONAL HELP
 
 Refer to the [Happy Hare documentation](https://github.com/moggieuk/Happy-Hare/wiki).
 
-## ADVANCED USERS ONLY
+# ADVANCED USERS ONLY
 
 Happy Hare allows for a lot of configuration - we will place interesting options and more install steps here.
 
