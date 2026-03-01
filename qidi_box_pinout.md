@@ -1,5 +1,7 @@
 # Qidi Box Pinout (Reverse Engineered from v1)
 
+The Qidi Box uses the [STM32F402RCT6](https://www.st.com/resource/en/datasheet/stm32f401cc.pdf) microcontroller.
+
 **Note:** The stepper motor drivers (TMC2009) are not connected by UART, the configuration is done via resistors. UART connection requires reworking the board (soldering of 0402 resistors, tightly packed) and is thus not recommended.
 
 | No | Pin \ Slot | Function | Comment |
