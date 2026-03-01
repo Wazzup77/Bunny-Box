@@ -260,3 +260,4 @@ Refer to the [Happy Hare documentation](https://github.com/moggieuk/Happy-Hare/w
 Happy Hare allows for a lot of configuration - we will place interesting options and more install steps here.
 
 - [Happy Hare Standalone](hh-standalone) - focused on using Happy Hare to the best of its ability - at the cost of being incompatible with stock Qidi gcode.
+-

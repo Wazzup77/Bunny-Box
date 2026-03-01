@@ -25,3 +25,5 @@ Report new issues via the Github "Issues" tab.
 4. Make sure your gcode_macros.cfg follows the following rule (in addition to the common changes made during installation):
 
     * nothing that requires filament happens in PRINT_START
+
+5. If you are using the Conch hotend, you will need to modify the mmu_macro_vars.cfg file to use the values for the Conch hotend. They are present inside the file already (in the Tip Forming section), just uncomment them out and remove the stock hotend values.
