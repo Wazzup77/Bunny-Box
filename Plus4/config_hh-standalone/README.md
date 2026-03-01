@@ -2,8 +2,8 @@
 
 The goal of this config is to have a configuration that uses Happy Hare as much as possible. In this way we have access to all the advanced features of Happy Hare and can configure the printer to our liking via mmu configuration files.
 
-[!WARNING]
-Gcodes for this config differ from Qidi's stock box gcode. Do not use old Qidi Box gcodes or the stock Qidi slicer profile!
+>[!WARNING]
+>Gcodes for this config differ from Qidi's stock box gcode. Do not use old Qidi Box gcodes or the stock Qidi slicer profile!
 
 ## STATUS
 
