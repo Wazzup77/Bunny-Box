@@ -98,7 +98,7 @@ mkdir -p "$BACKUP_DIR"
 
 if [ -f "$CONFIG_DIR/printer.cfg" ]; then cp "$CONFIG_DIR/printer.cfg" "$BACKUP_DIR/"; fi
 if [ -f "$CONFIG_DIR/gcode_macro.cfg" ]; then cp "$CONFIG_DIR/gcode_macro.cfg" "$BACKUP_DIR/"; fi
-if [ -d "$CONFIG_DIR/mmu" ]; then cp -r "$CONFIG_DIR/mmu" "$BACKUP_DIR/"; fi
+if [ -d "$CONFIG_DIR/mmu" ]; then mv "$CONFIG_DIR/mmu" "$BACKUP_DIR/"; fi
 if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then cp "$CONFIG_DIR/bunnybox_macros.cfg" "$BACKUP_DIR/"; fi
 echo "Backups saved to $BACKUP_DIR"
 
@@ -220,6 +220,8 @@ def modify_printer_cfg():
     # Happy Hare splits its logic into multiple base configs that are necessary for operation.
     if '[include mmu/base/*.cfg]' not in content:
         content = '[include mmu/base/*.cfg]\n' + content
+    if '[include mmu/optional/client_macros.cfg]' not in content:
+        content = '[include mmu/optional/client_macros.cfg]\n' + content
 
     lines = content.split('\n')
     in_hall_sensor = False
