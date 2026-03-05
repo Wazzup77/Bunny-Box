@@ -3,13 +3,21 @@
 
 ## AUTO INSTALLATION
 
-TODO - installer script will be made available in the future.
+The easiest way to install Happy Hare on your Qidi Plus4 is to use the provided automated script. 
+
+1. **Connect to your printer** via SSH.
+2. **Download and run the script**:
+   ```bash
+   wget -qO - https://raw.githubusercontent.com/Wazzup77/Happy-Hare-Plus4-Configs/main/Plus4/install-bb-p4.sh | bash
+   ```
+   
+The script will backup your configurations, download the necessary files, prompt you for your serial ID, and automatically install Happy Hare.
 
 ## MANUAL INSTALLATION
 
 ### HAPPY HARE INSTALLATION
 <details>
-<summary> HAPPY HARE INSTALL </summary>
+<summary> STEP 1: HAPPY HARE INSTALL </summary>
 
 1. Select your config variant. At present, you can select from:
 
@@ -57,7 +65,7 @@ sudo service klipper restart
 ```
 </details>
 
-### printer.cfg CHANGES
+### STEP 2:printer.cfg CHANGES
 
 <details>
 <summary> `[printer.cfg]` CHANGES </summary>
@@ -97,11 +105,16 @@ logging: False
 -pause_delay: 0.5
 ```
 
-4. Make sure Happy Hare files were included during install in printer.cfg: `[include mmu/base/*.cfg]`. Other mmu directories should not be included!
+4. Make sure Happy Hare files were included during install in printer.cfg: 
+```
+[include mmu/base/*.cfg]
+[include mmu/optional/client_macros.cfg]
+```
+Other mmu directories should not be included!
 
 </details>
 
-### gcode_macro.cfg CHANGES
+### STEP 3: gcode_macro.cfg CHANGES
 
 <details>
 <summary> `[gcode_macro.cfg]` CHANGES </summary>
@@ -143,7 +156,7 @@ gcode:
 </details>
 
 
-### USER INTERFACE
+### STEP 4: USER INTERFACE
 
 <details>
 <summary> USER INTERFACE </summary>
@@ -168,10 +181,14 @@ Alternatively you can also install Mainsail instead of Fluidd.
 
 </details>
 
-# SLICER SETTINGS
+<details>
+
+<summary> ### STEP 5: SLICER SETTINGS </summary>
 
 None! The mod is intended to be transparent for the slicer. If your gcode works with a stock Plus4, it should work with Happy Hare. 
 Tested on Orca Slicer using the [following g-codes](slicer_machine_gcodes.md), which are meant to replicate the Qidi Slicer profile.
+
+</details>
 
 # ADDITIONAL TUNING
 
