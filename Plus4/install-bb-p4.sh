@@ -332,7 +332,7 @@ EOF
 
 echo ""
 echo "==> Changing script permissions (just in case)..."
-chmod +x "$0"
+if [ -f "$0" ]; then chmod +x "$0" 2>/dev/null || true; fi
 
 echo ""
 echo "==> Restarting Klipper..."
