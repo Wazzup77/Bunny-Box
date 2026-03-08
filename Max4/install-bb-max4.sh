@@ -351,6 +351,40 @@ echo "==> Changing script permissions (just in case)..."
 if [ -f "$0" ]; then chmod +x "$0" 2>/dev/null || true; fi
 
 echo ""
+echo "==> Environment Sensor Installation..."
+read -p "Do you want to install the custom AHT10 environment sensor module? (Recommended) (Y/n) " INSTALL_AHT10 </dev/tty
+if [[ -z "$INSTALL_AHT10" ]] || [[ "$INSTALL_AHT10" =~ ^[Yy]$ ]]; then
+    echo "Installing custom aht10.py module..."
+    EXTRAS_DIR="$HOME/klipper/klippy/extras"
+    if [ -d "$EXTRAS_DIR" ]; then
+        cd "$EXTRAS_DIR"
+        
+        # Backup existing file if it exists
+        if [ -f "aht10.py" ]; then
+            if command -v sudo >/dev/null 2>&1; then
+                sudo mv aht10.py aht10.py.bak
+            else
+                mv aht10.py aht10.py.bak
+            fi
+            echo "Backed up existing aht10.py to aht10.py.bak"
+        fi
+        
+        # Download new file
+        if wget -qO aht10.py https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/aht10.py; then
+            echo "Successfully downloaded custom aht10.py module"
+        else
+            echo "Failed to download custom aht10.py module"
+        fi
+        
+        cd - >/dev/null
+    else
+        echo "Error: Could not find klipper extras directory at $EXTRAS_DIR"
+    fi
+else
+    echo "Skipping custom environment sensor module installation."
+fi
+
+echo ""
 echo "==> Restarting Klipper..."
 if command -v sudo >/dev/null 2>&1; then
     sudo service klipper restart || echo "Failed to restart klipper automatically. Please restart it manually."

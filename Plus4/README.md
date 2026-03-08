@@ -191,6 +191,29 @@ Go into your pritner settings in the slicer and change them to use the [followin
 
 </details>
 
+### (optional) STEP 6: ENVIRONMENT SENSOR
+
+<details>
+<summary> ENVIRONMENT SENSOR </summary>
+
+To be able to view temperature and humidity in the printer web interface reliably, you need to install a aht10.py module from modern Klipper. 
+
+> [!NOTE]
+> I recommend doing this step for stability, but you can skip it by changing the `[temperature_sensor box1_env]` `sensor_type` to `AHT10` in the `mmu_hardware.cfg`. If you are on mainline Klipper, Freedi or Kalico, you can skip this step altogether, though it won't hurt anything if you do it.
+
+1. Go to the Klipper directory and clone the module
+
+```bash
+    cd klipper/klippy/extras
+
+    sudo mv aht10.py aht10.py.bak
+
+    wget https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/aht10.py
+```
+
+</details>
+
+
 # ADDITIONAL TUNING
 
 1. Speed! The default Qidi profile is very slow. You can speed it up by increasing the values in the SPEEDS section in mmu_parameters.cfg. Keep in mind that these settings will vary between different Qidi Boxes. Generally loading speeds can be increased by 20-30% without issues, but keep in mind that going fast may cause filament swaps to fail. Going too fast may also cause the filament to be ground up by the gears. Remember to recalibrate the encoder after changing speeds (its measurement will vary widely depending on speed).
