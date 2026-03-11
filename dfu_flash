@@ -2,10 +2,10 @@
 
 1. Build katapult
 
-    ```
-    cd ~/katapult
-    make menuconfig
-    ```
+```
+cd ~/katapult
+make menuconfig
+```
     Make sure your menuconfig matches this:
 
     ![image](doc/images/mmu-mcu-katapult-menuconfig.png)
