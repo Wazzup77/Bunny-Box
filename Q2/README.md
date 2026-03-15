@@ -3,7 +3,7 @@
 
 ## AUTO INSTALLATION
 
-The easiest way to install Happy Hare on your Qidi Plus4 is to use the provided automated script. 
+The easiest way to install Happy Hare on your Qidi Q2 is to use the provided automated script. 
 
 1. **Connect to your printer** via SSH.
 2. **Download and run the script**:
@@ -111,13 +111,36 @@ switch_pin:!THR:PA1       # Detect switch pin
 
 0. Backup your gcode_macro.cfg file! Just in case you want to return to the stock config.
 
-1. Remove `PAUSE` (or comment it out).
+1. In `PRINT_START` we need to change Box detection logic:
+```diff
+[gcode_macro PRINT_START]
+gcode:
+[...]
+-    {% if printer.save_variables.variables.box_count >= 1 %} 
++    {% if printer.mmu.num_gates >= 4 %} 
+        SAVE_VARIABLE VARIABLE=load_retry_num VALUE=0
+        SAVE_VARIABLE VARIABLE=retry_step VALUE=None
+        CLEAR_TOOLCHANGE_STATE
+        {% for i in range(16) %}
+            SAVE_VARIABLE VARIABLE=runout_{i} VALUE=0
+            G4 P100
+        {% endfor %}
+-        {% if printer.save_variables.variables.enable_box == 1 %}
++        {% if printer.mmu.enabled %}
+            BOX_PRINT_START EXTRUDER={extruder} HOTENDTEMP={hotendtemp}
+            M400
+            EXTRUSION_AND_FLUSH HOTEND={hotendtemp}
+        {% endif %}
+[...]
+```
 
-2. Remove `RESUME_PRINT` (or comment it out).
+2. Remove `PAUSE` (or comment it out).
 
-3. Remove `RESUME` (or comment it out).
+3. Remove `RESUME_PRINT` (or comment it out).
 
-4. Remove `CANCEL_PRINT` (or comment it out).
+4. Remove `RESUME` (or comment it out).
+
+5. Remove `CANCEL_PRINT` (or comment it out).
 
 </details>
 
@@ -153,7 +176,7 @@ Alternatively you can also install Mainsail instead of Fluidd.
 <details>
 <summary> SLICER SETTINGS </summary>
 
-Go into your pritner settings in the slicer and change them to use the [following machine g-codes](slicer_machine_gcodes.md).
+Go into your pritner settings in the slicer and change them to use the [following machine g-codes](./config_hh-standalone/slicer_machine_gcodes.md).
 
 </details>
 
@@ -183,7 +206,7 @@ To be able to view temperature and humidity in the printer web interface reliabl
 # ADDITIONAL TUNING
 
 1. Speed! The default Qidi profile is very slow. You can speed it up by increasing the values in the SPEEDS section in mmu_parameters.cfg. Keep in mind that these settings will vary between different Qidi Boxes. Generally loading speeds can be increased by 20-30% without issues, but keep in mind that going fast may cause filament swaps to fail. Going too fast may also cause the filament to be ground up by the gears. Remember to recalibrate the encoder after changing speeds (its measurement will vary widely depending on speed).
-2. Tip forming. The base configuration uses the cutter. Tip forming allows you to reduce filament waste by removing the whole filament piece from the hotend. The disadvantage is that good tuning is needed to avoid clogs. Although the profile in these configs has been tested on multiple filaments across multiple Plus4 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Activate it by changing: 
+2. Tip forming. The base configuration uses the cutter. Tip forming allows you to reduce filament waste by removing the whole filament piece from the hotend. The disadvantage is that good tuning is needed to avoid clogs. Although the profile in these configs has been tested on multiple filaments across multiple Q2 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Activate it by changing: 
 `form_tip_macro: _MMU_CUT_TIP` to `form_tip_macro: _MMU_FORM_TIP`
 
 

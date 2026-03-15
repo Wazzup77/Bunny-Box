@@ -4,10 +4,10 @@
 set -e
 
 # =========================================================================
-# Happy Hare + Qidi Plus4 Automatic Installation Script
+# Happy Hare + Qidi Q2 Automatic Installation Script
 # =========================================================================
 # This script automates the installation of Happy Hare and configures
-# a Qidi Plus4 for standalone usage. It can be run either from a cloned
+# a Qidi Q2 for standalone usage. It can be run either from a cloned
 # repository or standalone (e.g., via wget or curl).
 # =========================================================================
 
@@ -61,10 +61,10 @@ if [ ! -d "$SCRIPT_DIR/config_hh-standalone" ]; then
     # Unzip the contents
     unzip -q "$ZIP_FILE" -d "$TEMP_DIR"
     
-    # Update SCRIPT_DIR to point to the extracted Plus4 folder
+    # Update SCRIPT_DIR to point to the extracted Q2 folder
     # We detect the extracted folder name dynamically:
     EXTRACTED_DIR=$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)
-    SCRIPT_DIR="$EXTRACTED_DIR/Plus4"
+    SCRIPT_DIR="$EXTRACTED_DIR/Q2"
     
     if [ ! -d "$SCRIPT_DIR/config_hh-standalone" ]; then
          echo "Error: Expected configuration folders not found in downloaded archive."
@@ -76,11 +76,11 @@ fi
 
 
 echo "========================================================="
-echo "   Happy Hare + Qidi Plus4 Automatic Installer "
+echo "   Happy Hare + Qidi Q2 Automatic Installer "
 echo "========================================================="
 echo ""
 echo "This script will automate the installation of Happy Hare"
-echo "and configure your Qidi Plus4 for standalone usage."
+echo "and configure your Qidi Q2 for standalone usage."
 echo "Please ensure you have read the README."
 echo ""
 read -p "Do you want to continue? (y/n) " -n 1 -r </dev/tty
@@ -103,15 +103,8 @@ if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then cp "$CONFIG_DIR/bunnybox_macro
 echo "Backups saved to $BACKUP_DIR"
 
 echo ""
-echo "==> Select Configuration Variant:"
-echo "1) config_hh-standalone (Recommended)"
-echo "2) config_qidi-like (Not currently working)"
-read -p "Select variant [1/2, default 1]: " VARIANT_CHOICE </dev/tty
-if [ "$VARIANT_CHOICE" == "2" ]; then
-    CONFIG_VARIANT="config_qidi-like"
-else
-    CONFIG_VARIANT="config_hh-standalone"
-fi
+echo "==> Using Configuration Variant: config_hh-standalone (Recommended)"
+CONFIG_VARIANT="config_hh-standalone"
 
 if [ ! -d "$SCRIPT_DIR/$CONFIG_VARIANT" ]; then
     echo "Error: $CONFIG_VARIANT directory not found in $SCRIPT_DIR"
@@ -122,7 +115,7 @@ echo ""
 echo "==> Copying configuration files from $CONFIG_VARIANT..."
 # Copy the Happy Hare MMU directory from the chosen variant into Klipper config
 cp -r "$SCRIPT_DIR/$CONFIG_VARIANT/mmu" "$CONFIG_DIR/"
-# Copy the custom macros specific to the Plus4 integration
+# Copy the custom macros specific to the Q2 integration
 cp "$SCRIPT_DIR/$CONFIG_VARIANT/bunnybox_macros.cfg" "$CONFIG_DIR/"
 echo "Configurations copied."
 
@@ -229,43 +222,50 @@ def modify_printer_cfg():
     if '[include bunnybox_macros.cfg]' not in content:
         content = '[include bunnybox_macros.cfg]\n' + content
         
+    # 3. Add [duplicate_pin_override] if not present
+    if '[duplicate_pin_override]' not in content:
+        content = '[duplicate_pin_override]\npins: THR:PA1\n\n' + content
+    else:
+        # Ensure THR:PA1 is in the pins list if the section exists
+        def add_pin(match):
+            pins_line = match.group(0)
+            if 'THR:PA1' not in pins_line:
+                return pins_line.rstrip() + ', THR:PA1\n'
+            return pins_line
+        content = re.sub(r'(?m)^pins:.*$', add_pin, content)
+
     # 4. Make sure Happy Hare files are included: `[include mmu/base/*.cfg]`
-    # Happy Hare splits its logic into multiple base configs that are necessary for operation.
     if '[include mmu/base/*.cfg]' not in content:
         content = '[include mmu/base/*.cfg]\n' + content
     if '[include mmu/optional/client_macros.cfg]' not in content:
         content = '[include mmu/optional/client_macros.cfg]\n' + content
 
     lines = content.split('\n')
-    in_hall_sensor = False
+    in_filament_sensor = False
     new_lines = []
     
-    # These properties from the stock filament width sensor MUST be disabled
+    # These properties from the stock filament switch sensor MUST be disabled
     # or they will conflict directly with the MMU operation.
     lines_to_comment = [
-        'min_diameter',
-        'use_current_dia_while_delay',
         'pause_on_runout',
         'runout_gcode',
-        'RESET_FILAMENT_WIDTH_SENSOR',
+        'insert_gcode',
         'M118 Filament run out',
         'can_auto_reload',
         'AUTO_RELOAD_FILAMENT',
         '{% endif %}',
-        '{% if',
-        'event_delay',
-        'pause_delay'
+        '{% if'
     ]
     
     for line in lines:
-        if line.strip().startswith('[hall_filament_width_sensor]'):
-            in_hall_sensor = True
+        if line.strip().startswith('[filament_switch_sensor filament_switch_sensor]'):
+            in_filament_sensor = True
             new_lines.append(line)
             continue
-        elif in_hall_sensor and line.strip().startswith('['):
-            in_hall_sensor = False
+        elif in_filament_sensor and line.strip().startswith('['):
+            in_filament_sensor = False
             
-        if in_hall_sensor and line.strip():
+        if in_filament_sensor and line.strip():
             if not line.strip().startswith('#'):
                 should_comment = False
                 for p in lines_to_comment:
