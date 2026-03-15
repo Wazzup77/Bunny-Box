@@ -8,7 +8,7 @@ The easiest way to install Happy Hare on your Qidi Plus4 is to use the provided 
 1. **Connect to your printer** via SSH.
 2. **Download and run the script**:
    ```bash
-   wget -qO - https://raw.githubusercontent.com/Wazzup77/Happy-Hare-Plus4-Configs/main/Plus4/install-bb-p4.sh | bash
+   wget -qO - https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/Plus4/install-bb-p4.sh | bash
    ```
    
 The script will backup your configurations, download the necessary files, prompt you for your serial ID, and automatically install Happy Hare.
@@ -21,7 +21,6 @@ The script will backup your configurations, download the necessary files, prompt
 
 1. Select your config variant. At present, you can select from:
 
-- NOT CURRENTLY WORKING [`config_qidi-like`](./config_qidi-like/README.md) - Qidi's stock box config, aiming to be as close to stock as possible and compatible with stock Qidi Box gcode
 - [`config_hh-standalone`](./config_hh-standalone/README.md) - Happy Hare focused config, taking advantage of its features for a more Happy-Hare experience
 
 2. Copy the configs (`mmu` folder and `bunnybox_macros.cfg`) from the selected variant to your printer's config folder.
@@ -43,6 +42,7 @@ Copy that into your mmu.cfg in the `serial:` parameter, replacing the old value.
 4. Install Happy Hare from the [WIP repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
 
 ```bash
+cd ~
 git clone -b bunnybox https://github.com/Wazzup77/Happy-Hare.git
 ```
 
