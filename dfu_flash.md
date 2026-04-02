@@ -1,33 +1,38 @@
 # Flashing the QIDI Box
 
-## Flashing Katapult
+## Installing Katapult via DFU Mode 
 
-1. Build Katapult
+1. Clone the Katapult repo (if you do not already have it installed)
+
+    ```
+    test -e ~/katapult && (cd ~/katapult && git pull) || (cd ~ && git clone https://github.com/Arksine/katapult) ; cd ~
+    ```
+
+2. Build Katapult
 
     ```
     cd ~/katapult
     make menuconfig
     ```
-    Make sure your menuconfig matches this:
+    Katapult menuconfig:
+   
+    <img width="860" height="245" alt="katapult" src="https://github.com/user-attachments/assets/03524906-ea54-4544-b8bd-d82ba6725583" />\
 
-    ![image](doc/images/mmu-mcu-katapult-menuconfig.png)
-
+    
     ```
     make clean
     make -j4
     ```
 
-2. Make sure the Klipper service stopped
-
-    ```
-    sudo service klipper stop
-    ```
-
-3. Put MCU into DFU mode
+4. Put MCU into DFU mode
 
     ```
     cd ~/katapult/scripts/
     python3 flashtool.py -d /dev/serial/by-id/usb-Klipper_QIDI_BOX_V1_1.1.1_56003A001051353033353536-if00 -b 500000 -r
+    ```
+    You should see Katapult requesting the bootloader:
+
+    ```
     Connecting to Serial Device /dev/serial/by-id/usb-Klipper_QIDI_BOX_V1_1.1.1_56003A001051353033353536-if00, baud 500000
     Detected USB device running Klipper
     Requesting USB bootloader for /dev/serial/by-id/usb-Klipper_QIDI_BOX_V1_1.1.1_56003A001051353033353536-if00...
@@ -37,20 +42,21 @@
     Bootloader Request Complete
     ```
 
-4. Check if MCU into DFU mode
+5. Verify that the MCU is in DFU mode
 
     ```
     lsusb
-    Bus 002 Device 006: ID 0483:df11 STMicroelectronics STM Device in DFU Mode
     ```
+    
+    <img width="705" height="41" alt="image" src="https://github.com/user-attachments/assets/dcb827d5-7c52-4e7c-9270-9fba33ed5438" />
 
-5. Flash Katapult:
+6. Flash Katapult
 
     ```
     sudo dfu-util -R -a 0 -s 0x08000000:mass-erase:force:leave -D ~/katapult/out/katapult.bin -d 0483:df11
     ```
 
-    You should see a successful flash like this:
+    You should see a successful Katapult flash:
 
     <!-- ![image](doc/images/mmu-mcu-katapult-flash-success.png) -->
 
@@ -97,35 +103,35 @@
     cd ~/klipper
     make menuconfig
     ```
-    Make sure your menuconfig matches this:
+    Klipper menuconfig:
 
-    <!-- ![image](doc/images/mmu-mcu-klipper-menuconfig.png) -->
+    <img width="860" height="245" alt="klipper" src="https://github.com/user-attachments/assets/2b4c3ad4-fcc9-4913-973a-3233f5586c42" />\
 
     ```
     make clean
     make -j4
     ```
 
-2. Make sure the Klipper service stopped
+2. Stop the Klipper service
 
     ```
     sudo service klipper stop
     ```
 
-3. Get device name:
+3. Retrive the Katpult /dev/serial ID
 
     ```
     ls -all /dev/serial/by-id/
     lrwxrwxrwx 1 root root 13 Feb  8 10:49 usb-katapult_stm32f401xc_56003A001051353033353536-if00 -> ../../ttyACM1
     ```
 
-4. Flash Klipper:
+4. Flash Klipper
 
     ```
     cd ~/katapult/scripts
     python3 flashtool.py -b 500000 -d /dev/ttyACM1 -f ~/klipper/out/klipper.bin
     ```
-    You should see a successful flash like this:
+    You should see a successful Klipper flash:
 
     <!-- ![image](doc/images/mmu-mcu-klipper-flash-success.png) --> 
 
@@ -153,9 +159,9 @@
     Programming Complete
     ```
 
-5. Get device name:
+5. Retrive the Klipper /dev/serial ID
 
     ```
-    ls -all /dev/serial/by-id/
+    ls /dev/serial/by-id/*
     usb-Klipper_stm32f401xc_56003A001051353033353536-if00 -> ../../ttyACM1
     ```
