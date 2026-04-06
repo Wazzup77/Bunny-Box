@@ -1,0 +1,171 @@
+# Flashing the QIDI Box
+
+> [!IMPORTANT]  
+> Flashing the QIDI Box with updated Klipper firmware is optional and not requried for successful BunnyBox operation.
+
+## Installing Katapult via DFU Mode 
+
+
+1. Clone the Katapult repo (if you do not already have it installed)
+
+    ```
+    test -e ~/katapult && (cd ~/katapult && git pull) || (cd ~ && git clone https://github.com/Arksine/katapult) ; cd ~
+    ```
+
+2. Build Katapult
+
+    ```
+    cd ~/katapult
+    make menuconfig
+    ```
+    Katapult menuconfig:
+   
+    <img width="860" height="245" alt="katapult" src="https://github.com/user-attachments/assets/03524906-ea54-4544-b8bd-d82ba6725583" />\
+
+    
+    ```
+    make clean
+    make -j4
+    ```
+
+4. Put MCU into DFU mode
+
+    ```
+    cd ~/katapult/scripts/
+    python3 flashtool.py -d /dev/serial/by-id/usb-Klipper_QIDI_BOX_V1_1.1.1_56003A001051353033353536-if00 -b 500000 -r
+    ```
+    You should see Katapult requesting the bootloader:
+
+    ```
+    Connecting to Serial Device /dev/serial/by-id/usb-Klipper_QIDI_BOX_V1_1.1.1_56003A001051353033353536-if00, baud 500000
+    Detected USB device running Klipper
+    Requesting USB bootloader for /dev/serial/by-id/usb-Klipper_QIDI_BOX_V1_1.1.1_56003A001051353033353536-if00...
+    Waiting for USB Reconnect...done
+    Detected new USB Device: 0483:5740 mks color boot
+    Device is not Katapult, exiting...
+    Bootloader Request Complete
+    ```
+
+5. Verify that the MCU is in DFU mode
+
+    ```
+    lsusb
+    ```
+    
+    <img width="705" height="41" alt="image" src="https://github.com/user-attachments/assets/dcb827d5-7c52-4e7c-9270-9fba33ed5438" />
+
+6. Flash Katapult
+
+    ```
+    sudo dfu-util -R -a 0 -s 0x08000000:mass-erase:force:leave -D ~/katapult/out/katapult.bin -d 0483:df11
+    ```
+
+    You should see a successful Katapult flash:
+
+    <!-- ![image](doc/images/mmu-mcu-katapult-flash-success.png) -->
+
+    ```
+    Copyright 2005-2009 Weston Schmidt, Harald Welte and OpenMoko Inc.
+    Copyright 2010-2021 Tormod Volden and Stefan Schmidt
+    This program is Free Software and has ABSOLUTELY NO WARRANTY
+    Please report bugs to http://sourceforge.net/p/dfu-util/tickets/
+
+    dfu-util: Warning: Invalid DFU suffix signature
+    dfu-util: A valid DFU suffix will be required in a future dfu-util release
+    Opening DFU capable USB device...
+    Device ID 0483:df11
+    Device DFU version 011a
+    Claiming USB DFU Interface...
+    Setting Alternate Interface #0 ...
+    Determining device status...
+    DFU state(10) = dfuERROR, status(10) = Device's firmware is corrupt. It cannot return to run-time (non-DFU) operations
+    Clearing status
+    Determining device status...
+    DFU state(2) = dfuIDLE, status(0) = No error condition is present
+    DFU mode device DFU version 011a
+    Device returned transfer size 2048
+    DfuSe interface name: "Internal Flash  "
+    Performing mass erase, this can take a moment
+    Setting timeout to 35 seconds
+    Downloading element to address = 0x08000000, size = 4980
+    Erase           [=========================] 100%         4980 bytes
+    Erase    done.
+    Download        [=========================] 100%         4980 bytes
+    Download done.
+    File downloaded successfully
+    Submitting leave request...
+    Transitioning to dfuMANIFEST state
+    dfu-util: can't detach
+    Resetting USB to switch back to Run-Time mode
+    ```
+
+## Flashing Klipper on the QIDI Box
+
+1. Build Klipper
+
+    ```
+    cd ~/klipper
+    make menuconfig
+    ```
+    Klipper menuconfig:
+
+    <img width="860" height="245" alt="klipper" src="https://github.com/user-attachments/assets/2b4c3ad4-fcc9-4913-973a-3233f5586c42" />\
+
+    ```
+    make clean
+    make -j4
+    ```
+
+2. Stop the Klipper service
+
+    ```
+    sudo service klipper stop
+    ```
+
+3. Retrive the Katpult /dev/serial ID
+
+    ```
+    ls -all /dev/serial/by-id/
+    lrwxrwxrwx 1 root root 13 Feb  8 10:49 usb-katapult_stm32f401xc_56003A001051353033353536-if00 -> ../../ttyACM1
+    ```
+
+4. Flash Klipper
+
+    ```
+    cd ~/katapult/scripts
+    python3 flashtool.py -b 500000 -d /dev/ttyACM1 -f ~/klipper/out/klipper.bin
+    ```
+    You should see a successful Klipper flash:
+
+    <!-- ![image](doc/images/mmu-mcu-klipper-flash-success.png) --> 
+
+    ```
+    Connecting to Serial Device /dev/ttyACM1, baud 500000
+    Detected USB device running Katapult
+    Detected Klipper binary version v2026.02.00-0-gc70d21ab-dirty-20260207_161419-mkspi, MCU: stm32f401xc
+    Attempting to connect to bootloader
+    Katapult Connected
+    Software Version: v0.0.1-110-gb0bf421
+    Protocol Version: 1.1.0
+    Block Size: 64 bytes
+    Application Start: 0x8008000
+    MCU type: stm32f401xc
+    Flashing '/home/mks/klipper/out/klipper.bin'...
+
+    [##################################################]
+
+    Write complete: 3 pages
+    Verifying (block count = 575)...
+
+    [##################################################]
+
+    Verification Complete: SHA = 676832F629B1902388F24738047FA78BE9F9F047
+    Programming Complete
+    ```
+
+5. Retrive the Klipper /dev/serial ID
+
+    ```
+    ls /dev/serial/by-id/*
+    usb-Klipper_stm32f401xc_56003A001051353033353536-if00 -> ../../ttyACM1
+    ```
