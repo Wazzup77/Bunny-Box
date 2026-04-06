@@ -49,6 +49,7 @@ We are for now relying on a fork of Happy Hare until our new features are pulled
 ## HARDWARE REFERENCE
 
 * [Qidi Box Pinout](qidi_box_pinout.md)
+* [Qidi Box DFU Flashing Guide](dfu_flash.md)
 
 ## ADDITIONAL HELP
 
@@ -59,7 +60,7 @@ Refer to the [Happy Hare documentation](https://github.com/moggieuk/Happy-Hare/w
 <details>
 <summary> Do I need to flash the Qidi Box firmware? </summary>
 
-No! Qidi Box already runs Klipper (Qidi's fork). Since the Box is a slave to the host (printer), flashing is not needed regardless of if you are connecting to a Qidi printer, a Qidi printer flashed with FreeDi or Kalico, or a non-Qidi printer. Nonetheless, you can flash it - the instructions are here.
+No! Qidi Box already runs Klipper (Qidi's fork). Since the Box is a slave to the host (printer), flashing is not needed regardless of if you are connecting to a Qidi printer, a Qidi printer flashed with FreeDi or Kalico, or a non-Qidi printer. Nonetheless, you can flash it - the instructions are [here](dfu_flash.md).
 
 </details>
 
