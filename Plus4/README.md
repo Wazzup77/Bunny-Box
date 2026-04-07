@@ -77,7 +77,7 @@ sudo service klipper restart
 
 2. Add `[include bunnybox_macros.cfg]` at the top.
 
-3. Modify the `[hall_filament_width_sensor]` section as follows (removing or commenting out the red lines):
+3. Modify the `[hall_filament_width_sensor]` section as follows (removing or commenting out the red lines, and setting `pause_on_runout` to `False`):
 ```diff
 [hall_filament_width_sensor]
 adc1: PA2
@@ -94,7 +94,7 @@ measurement_interval: 10
 logging: False
 -min_diameter: 0.3
 -use_current_dia_while_delay: False
--pause_on_runout:True
++pause_on_runout: False
 -runout_gcode:
 -            RESET_FILAMENT_WIDTH_SENSOR
 -            M118 Filament run out

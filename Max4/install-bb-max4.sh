@@ -251,7 +251,6 @@ def modify_printer_cfg():
     # These properties from the stock filament switch sensor MUST be disabled
     # or they will conflict directly with the MMU operation.
     lines_to_comment = [
-        'pause_on_runout',
         'runout_gcode',
         'M118 Filament run out',
         'can_auto_reload',
@@ -260,7 +259,7 @@ def modify_printer_cfg():
         '{% if',
         'insert_gcode'
     ]
-    
+
     for line in lines:
         if line.strip().startswith('[filament_switch_sensor filament_switch_sensor]'):
             in_sensor = True
@@ -268,17 +267,22 @@ def modify_printer_cfg():
             continue
         elif in_sensor and line.strip().startswith('['):
             in_sensor = False
-            
+
         if in_sensor and line.strip():
             if not line.strip().startswith('#'):
-                should_comment = False
-                for p in lines_to_comment:
-                    if p in line:
-                        should_comment = True
-                        break
-                if should_comment:
-                    line = '# ' + line
-        
+                # Explicitly set pause_on_runout to False instead of commenting it out,
+                # because Klipper defaults to True when the line is commented out.
+                if 'pause_on_runout' in line:
+                    line = 'pause_on_runout: False'
+                else:
+                    should_comment = False
+                    for p in lines_to_comment:
+                        if p in line:
+                            should_comment = True
+                            break
+                    if should_comment:
+                        line = '# ' + line
+
         new_lines.append(line)
 
     with open(printer_cfg_path, 'w') as f:

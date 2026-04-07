@@ -245,7 +245,6 @@ def modify_printer_cfg():
     lines_to_comment = [
         'min_diameter',
         'use_current_dia_while_delay',
-        'pause_on_runout',
         'runout_gcode',
         'RESET_FILAMENT_WIDTH_SENSOR',
         'M118 Filament run out',
@@ -256,7 +255,7 @@ def modify_printer_cfg():
         'event_delay',
         'pause_delay'
     ]
-    
+
     for line in lines:
         if line.strip().startswith('[hall_filament_width_sensor]'):
             in_hall_sensor = True
@@ -264,17 +263,22 @@ def modify_printer_cfg():
             continue
         elif in_hall_sensor and line.strip().startswith('['):
             in_hall_sensor = False
-            
+
         if in_hall_sensor and line.strip():
             if not line.strip().startswith('#'):
-                should_comment = False
-                for p in lines_to_comment:
-                    if p in line:
-                        should_comment = True
-                        break
-                if should_comment:
-                    line = '# ' + line
-        
+                # Explicitly set pause_on_runout to False instead of commenting it out,
+                # because Klipper defaults to True when the line is commented out.
+                if 'pause_on_runout' in line:
+                    line = 'pause_on_runout: False'
+                else:
+                    should_comment = False
+                    for p in lines_to_comment:
+                        if p in line:
+                            should_comment = True
+                            break
+                    if should_comment:
+                        line = '# ' + line
+
         new_lines.append(line)
 
     with open(printer_cfg_path, 'w') as f:

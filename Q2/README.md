@@ -85,13 +85,14 @@ sudo service klipper restart
 ```
 Other mmu directories should not be included!
 
-4. Modify the `[filament_switch_sensor filament_switch_sensor]` section (HH takes care of runout):
+4. Modify the `[filament_switch_sensor filament_switch_sensor]` section (HH takes care of runout). **Important:** Set `pause_on_runout` to `False` — do not comment it out, as Klipper defaults to `True`:
 ```diff
 +[duplicate_pin_override]
 +pins: THR:PA1
 +
 [filament_switch_sensor filament_switch_sensor]
 -pause_on_runout: True
++pause_on_runout: False
 -runout_gcode:
 -            M118 Filament run out
 -            {% set can_auto_reload = printer.save_variables.variables.auto_reload_detect|default(0) %}
