@@ -29,6 +29,28 @@ if [ ! -d "$CONFIG_DIR" ]; then
     exit 1
 fi
 
+# Ensure required tools are present. Qidi firmware images often ship without
+# git, and the standalone mode also needs unzip + curl/wget. Auto-install any
+# missing packages via apt-get (Qidi printers are Debian-based).
+echo "==> Checking dependencies..."
+NEEDED=()
+command -v git     >/dev/null 2>&1 || NEEDED+=(git)
+command -v python3 >/dev/null 2>&1 || NEEDED+=(python3)
+command -v unzip   >/dev/null 2>&1 || NEEDED+=(unzip)
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    NEEDED+=(curl)
+fi
+if [ ${#NEEDED[@]} -gt 0 ]; then
+    echo "Installing missing packages: ${NEEDED[*]}"
+    if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update || echo "Warning: apt-get update failed, continuing..."
+        sudo apt-get install -y "${NEEDED[@]}"
+    else
+        echo "Error: Cannot auto-install (need sudo + apt-get). Install manually: ${NEEDED[*]}"
+        exit 1
+    fi
+fi
+
 # Locate the directory where this script resides.
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
@@ -64,10 +86,6 @@ if [ ! -d "$SCRIPT_DIR/config_hh-standalone" ]; then
     fi
     
     # Unzip the contents
-    if ! command -v unzip >/dev/null 2>&1; then
-        echo "Error: 'unzip' is required but not installed. Install it with: sudo apt install unzip"
-        exit 1
-    fi
     unzip -q "$ZIP_FILE" -d "$TEMP_DIR"
     
     # Update SCRIPT_DIR to point to the extracted Plus4 folder
