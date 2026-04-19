@@ -172,7 +172,7 @@ Alternatively you can also install Mainsail instead of Fluidd.
 <details>
 <summary> SLICER SETTINGS </summary>
 
-Use the [following machine g-codes](./config_hh-standalone/slicer_machine_gcodes.md) with your slicer.
+Use the [following machine g-codes](./config_hh-standalone/slicer_machine_gcodes_hh.md) with your slicer.
 
 </details>
 

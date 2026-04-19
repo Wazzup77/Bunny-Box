@@ -178,7 +178,7 @@ Alternatively you can also install Mainsail instead of Fluidd.
 <details>
 <summary> SLICER SETTINGS </summary>
 
-Go into your pritner settings in the slicer and change them to use the [following machine g-codes](./config_hh-standalone/slicer_machine_gcodes.md).
+Go into your pritner settings in the slicer and change them to use the [following machine g-codes](./config_hh-standalone/slicer_machine_gcodes_hh.md).
 
 </details>
 
@@ -211,6 +211,18 @@ To be able to view temperature and humidity in the printer web interface reliabl
 2. Tip forming. The base configuration uses the cutter. Tip forming allows you to reduce filament waste by removing the whole filament piece from the hotend. The disadvantage is that good tuning is needed to avoid clogs. Although the profile in these configs has been tested on multiple filaments across multiple Q2 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Activate it by changing: 
 `form_tip_macro: _MMU_CUT_TIP` to `form_tip_macro: _MMU_FORM_TIP`
 
+# FAQ
+
+1. Q: I'm getting `Move out of range` errors on filament change operations.
+
+A: This is probably caused by skew correction. On the Q2 the cutter pin is very close to the lower movement limit on the X axis (X=-1). You can correct this by making small changes in `mmu_macro_vars.cfg`, either by:
+* (recommended) disabling the skew correction for the unload operation
+```
+variable_user_pre_unload_extension    : 'SET_SKEW CLEAR=1'    ; Executed after default logic
+variable_user_post_unload_extension   : 'SET_SKEW CLEAR=[your profile name]'    ; Executed after default logic
+```
+OR
+* (easier, but kinda dirty) moving the `variable_pin_loc_xy` up by a bit on the X axis (e.g. to -0.9) 
 
 # ADDITIONAL HELP
 
