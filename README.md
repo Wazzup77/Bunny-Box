@@ -37,6 +37,7 @@ Bunny Box is the Qidi Box mod that allows you to ditch Qidi's closed-source, pro
 ## ISSUES / TODO
 * Printer screen is broken on stock Qidi firmware while in print - probably won't be fixed
 * Qidi Studio sync is not working
+* Power-loss recovery is disabled. Qidi's PLR depends on closed-source code (binary `.so` on Plus4, shell scripts on Q2) and cannot restore MMU tool/gate state. The stock `DETECT_INTERRUPTION` popup ("Resume last print?") would auto-cancel on timeout and, even if accepted, would resume with the wrong filament. Our `bunnybox_macros.cfg` overrides `DETECT_INTERRUPTION` to silently clear the flag so the popup never appears.
 
 If you run into issues please report them in the issue tracker here. We are also on Qidi's Discord server [in a dedicated thread](https://discord.com/channels/1184400034641477722/1443579858679500822) if you want to chat.
 

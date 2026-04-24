@@ -480,7 +480,7 @@ def modify_gcode_macro_cfg():
     new_lines = []
     in_macro_to_comment = False
     macros_to_comment = ['[gcode_macro PAUSE]', '[gcode_macro RESUME_PRINT]', '[gcode_macro RESUME]', '[gcode_macro CANCEL_PRINT]']
-    
+
     for line in lines:
         stripped = line.strip()
         if any(stripped == m for m in macros_to_comment):
@@ -488,11 +488,28 @@ def modify_gcode_macro_cfg():
 
         if in_macro_to_comment and stripped.startswith('[') and not any(stripped == m for m in macros_to_comment):
             in_macro_to_comment = False
-            
+
         if in_macro_to_comment and not line.strip().startswith('#'):
             new_lines.append('# ' + line)
         else:
             new_lines.append(line)
+
+    # 3. Comment out the `save_last_file` call site(s) in PRINT_START.
+    # save_last_file is Qidi's power-loss recovery hook (defined on the Q2 in
+    # plr.cfg: stashes file path, temps, and sets was_interrupted=True in
+    # saved_variables.cfg on every print start). PLR is disabled under HH
+    # (see DETECT_INTERRUPTION override in bunnybox_macros.cfg), so we stop
+    # it being called in the first place — otherwise was_interrupted would
+    # be written True every print and only cleared at next boot by our
+    # DETECT_INTERRUPTION override, which is fine but untidy.
+    out_lines = []
+    for line in new_lines:
+        stripped = line.strip()
+        if stripped == 'save_last_file' or stripped.lower() == 'save_last_file':
+            out_lines.append('# ' + line)
+        else:
+            out_lines.append(line)
+    new_lines = out_lines
 
     with open(gcode_macro_cfg_path, 'w') as f:
         f.write('\n'.join(new_lines))

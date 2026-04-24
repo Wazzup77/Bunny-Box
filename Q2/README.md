@@ -145,6 +145,14 @@ gcode:
 
 5. Remove `CANCEL_PRINT` (or comment it out).
 
+6. Comment out the `save_last_file` call at the end of `PRINT_START`. This is Qidi's power-loss recovery hook (defined in `plr.cfg`) and sets `was_interrupted=True` in `saved_variables.cfg` on every print start; PLR is disabled under Happy Hare (see [DETECT_INTERRUPTION override](./config_hh-standalone/bunnybox_macros.cfg)) so the call is wasteful.
+```diff
+     SET_PRINT_STATS_INFO CURRENT_LAYER=1
+     ENABLE_ALL_SENSOR
+-    save_last_file
++#    save_last_file
+```
+
 </details>
 
 
@@ -209,7 +217,7 @@ To be able to view temperature and humidity in the printer web interface reliabl
 # ADDITIONAL TUNING
 
 1. Speed! The default Qidi profile is very slow. You can speed it up by increasing the values in the SPEEDS section in mmu_parameters.cfg. Keep in mind that these settings will vary between different Qidi Boxes. Generally loading speeds can be increased by 20-30% without issues, but keep in mind that going fast may cause filament swaps to fail. Going too fast may also cause the filament to be ground up by the gears. Remember to recalibrate the encoder after changing speeds (its measurement will vary widely depending on speed).
-2. Tip forming. The base configuration uses the cutter. Tip forming allows you to reduce filament waste by removing the whole filament piece from the hotend. The disadvantage is that good tuning is needed to avoid clogs. Although the profile in these configs has been tested on multiple filaments across multiple Q2 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Activate it by changing: 
+2. Tip forming. The base configuration uses the cutter. Tip forming allows you to reduce filament waste by removing the whole filament piece from the hotend. The disadvantage is that good tuning is needed to avoid clogs. Although the profile in these configs has been tested on multiple filaments across multiple Plus4 printers, it may require tuning on your specific printer/filament. If you have a custom hotend, you need to update the configration too. Activate it by changing: 
 `form_tip_macro: _MMU_CUT_TIP` to `form_tip_macro: _MMU_FORM_TIP`
 To additionally improve the movement logic on tip forming (by moving to the purge chute first) add `toolchange` to the list of paramters at `variable_enable_park_printing` as such:
 `variable_enable_park_printing   : 'toolchange,runout,load,complete,pause,cancel'	; Empty '' to disable parking`
