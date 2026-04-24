@@ -77,7 +77,9 @@ sudo service klipper restart
 
 2. Add `[include bunnybox_macros.cfg]` at the top.
 
-3. Modify the `[hall_filament_width_sensor]` section as follows (removing or commenting out the red lines, and setting `pause_on_runout` to `False`):
+3. **Recommended:** Comment out or delete the entire `[hall_filament_width_sensor]` section. It reads `adc1: PA2` and `adc2: PA3` — the same pins the MMU uses for `extruder_switch_pin`/`extruder_switch_pin2`. Two ADC readers on the same pins can cause `Timer too close` MCU crashes. The MMU already provides filament detection, so the stock hall sensor is redundant.
+
+   If you prefer to keep the section (not recommended), modify it as follows (removing or commenting out the red lines, and setting `pause_on_runout` to `False`):
 ```diff
 [hall_filament_width_sensor]
 adc1: PA2
