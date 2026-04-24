@@ -1,10 +1,15 @@
 
+> [!CAUTION]
+> **Max4 support is experimental — hackers wanted, do not install on a working printer.** The Max4 firmware stack is materially more complex than Plus4 or Q2 and the HH integration is only partially mapped out. If something fails, you are expected to diagnose and fix it.
+>
+> **What's different about the Max4:**
+> - It adds a second closed-source state machine, `multi_color_controller.so`, on top of the `box_extras` / `box_autofeed` / `box_stepper` / `box_rfid` stack shared with Plus4/Q2. `multi_color_controller` implements both local orchestration and a USB-JSON protocol to the second-gen box.
+> - The macro layer is built on [Justin Schuh's klipper-macros](https://github.com/jschuh/klipper-macros) (packaged as `klipper-macros-qd`) with a phased `PRINT_START` (`_PRINT_START_PHASE_INIT` → `_PRINT_START_BOX_PREPAR` → `_PRINT_START_PHASE_PREHEAT` → `_PRINT_START_PHASE_PROBING` → `_PRINT_START_PHASE_EXTRUDER`) rather than the single flat `gcode_macro.cfg` pattern of Plus4/Q2. Lowercase section names (`[gcode_macro pause]`, `[gcode_macro clear_pause]`) are used. This is more complex to modify and will require live testing which I cannot do (I do not own a Max4).
+> - Closed-source dependencies extend beyond the box: `probe_air`, `multi_color_controller`, `d_bus_service_manager`, `ai_func_manager`, `print_stats_manager`, `smart_output_pin`, `cl_interface`, `closed_loop`. This should be avoidable, since Happy Hare allows us to remove Qidi box-related configs and thus prevent the .so files from loading. However, for the Max4, the .so files extend further beyond the Plus4/Q2 scope, so hidden dependancies may emerge.
+
 # INSTALLATION
 
 ## AUTO INSTALLATION
-
->[!WARNING]
->Auto installation not yet tested!
 
 The easiest way to install Happy Hare on your Qidi Max4 is to use the provided automated script. 
 
@@ -139,6 +144,8 @@ gcode:
     - Remove `RESUME_PRINT` (or comment it out).
     - Remove `RESUME` (or comment it out).
     - Remove `CANCEL_PRINT` (or comment it out).
+
+3. In `start_end.cfg`, comment out any `save_last_file` call inside `PRINT_START`. This is Qidi's power-loss recovery hook and sets `was_interrupted=True` in `saved_variables.cfg` on every print start; PLR is disabled under Happy Hare (see [DETECT_INTERRUPTION override](./config_hh-standalone/bunnybox_macros.cfg)) so the call is wasteful.
 
 </details>
 

@@ -358,9 +358,38 @@ def modify_printer_cfg():
     if '[include mmu/optional/client_macros.cfg]' not in content:
         content = '[include mmu/optional/client_macros.cfg]\n' + content
 
-    # Add duplicate_pin_override before filament_switch_sensor if not present
-    if '[duplicate_pin_override]' not in content and '[filament_switch_sensor filament_switch_sensor]' in content:
-        content = content.replace('[filament_switch_sensor filament_switch_sensor]', '[duplicate_pin_override]\npins: THR:PA0\n\n[filament_switch_sensor filament_switch_sensor]')
+    # Ensure THR:PA0 is declared in [duplicate_pin_override]. HH's
+    # mmu_hardware.cfg uses `extruder_switch_pin: !THR:PA0`, which collides
+    # with the stock `[filament_switch_sensor filament_switch_sensor]
+    # switch_pin: !THR:PA0`. Klipper needs the pin listed in
+    # duplicate_pin_override or it errors at load.
+    #
+    # Stock Max4 printer.cfg already declares an empty `[duplicate_pin_override]`
+    # section, so a naive insert creates a duplicate section and fails to parse.
+    # Handle both cases: merge into the existing section if present, otherwise
+    # inject a fresh one before the sensor.
+    if re.search(r'(?m)^\[duplicate_pin_override\]', content):
+        def _merge_pin(m):
+            existing = m.group('pins').strip()
+            if not existing:
+                return f"{m.group('header')}pins: THR:PA0"
+            pins = [p.strip() for p in existing.split(',') if p.strip()]
+            if 'THR:PA0' in pins:
+                return m.group(0)
+            pins.append('THR:PA0')
+            return f"{m.group('header')}pins: {', '.join(pins)}"
+
+        content = re.sub(
+            r'(?m)(?P<header>^\[duplicate_pin_override\][^\n]*\n)pins:(?P<pins>[^\n]*)',
+            _merge_pin,
+            content,
+            count=1,
+        )
+    elif '[filament_switch_sensor filament_switch_sensor]' in content:
+        content = content.replace(
+            '[filament_switch_sensor filament_switch_sensor]',
+            '[duplicate_pin_override]\npins: THR:PA0\n\n[filament_switch_sensor filament_switch_sensor]',
+        )
 
     lines = content.split('\n')
     in_sensor = False
@@ -415,12 +444,24 @@ def modify_start_end_cfg():
     with open(start_end_cfg_path, 'r') as f:
         content = f.read()
 
-    # Comment out `_PRINT_START_BOX_PREPAR` inside PRINT_START
+    # Comment out `_PRINT_START_BOX_PREPAR` inside PRINT_START, and the
+    # `save_last_file` call site(s). save_last_file is Qidi's power-loss
+    # recovery hook (sets was_interrupted=True in saved_variables.cfg on
+    # every print start). PLR is disabled under HH (see DETECT_INTERRUPTION
+    # override in bunnybox_macros.cfg), so we stop it being called —
+    # otherwise was_interrupted would be written True every print and only
+    # cleared at next boot, which is harmless but untidy.
     lines = content.split('\n')
     new_lines = []
-    
+
     for line in lines:
-        if '_PRINT_START_BOX_PREPAR' in line and not line.strip().startswith('#'):
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            new_lines.append(line)
+            continue
+        if '_PRINT_START_BOX_PREPAR' in line:
+            new_lines.append('# ' + line)
+        elif stripped.lower() == 'save_last_file':
             new_lines.append('# ' + line)
         else:
             new_lines.append(line)
@@ -437,21 +478,28 @@ def modify_pause_resume_cancel_cfg():
     with open(pause_resume_cancel_cfg_path, 'r') as f:
         content = f.read()
 
-    # 2. Comment out PAUSE, RESUME_PRINT, RESUME, CANCEL_PRINT blocks entirely
+    # 2. Comment out PAUSE, RESUME_PRINT, RESUME, CANCEL_PRINT, CLEAR_PAUSE
+    # blocks entirely. Klipper gcode command names are case-insensitive, so
+    # the match here is too — Max4 stock config uses lowercase
+    # `[gcode_macro pause]` / `[gcode_macro clear_pause]`. CLEAR_PAUSE is
+    # included because Max4's stock clear_pause references variables on
+    # RESUME_PRINT; leaving it active after we delete RESUME_PRINT would make
+    # the UI's "Clear Pause" button throw at runtime.
     lines = content.split('\n')
     new_lines = []
     in_macro_to_comment = False
-    macros_to_comment = ['[gcode_macro PAUSE]', '[gcode_macro RESUME_PRINT]', '[gcode_macro RESUME]', '[gcode_macro CANCEL_PRINT]']
-    
+    macros_to_comment = {'pause', 'resume_print', 'resume', 'cancel_print', 'clear_pause'}
+    section_re = re.compile(r'^\[gcode_macro\s+([A-Za-z_][A-Za-z0-9_]*)\s*\]')
+
     for line in lines:
         stripped = line.strip()
-        if any(stripped == m for m in macros_to_comment):
+        match = section_re.match(stripped)
+        if match and match.group(1).lower() in macros_to_comment:
             in_macro_to_comment = True
-
-        if in_macro_to_comment and stripped.startswith('[') and not any(stripped == m for m in macros_to_comment):
+        elif in_macro_to_comment and stripped.startswith('['):
             in_macro_to_comment = False
 
-        if in_macro_to_comment and not line.strip().startswith('#'):
+        if in_macro_to_comment and not stripped.startswith('#'):
             new_lines.append('# ' + line)
         else:
             new_lines.append(line)
