@@ -67,6 +67,81 @@ function cleanup() {
 # Register the cleanup function to run when the script exits (normally or on error).
 trap cleanup EXIT
 
+# Returns 0 if a bunnybox / Happy Hare install is detected on this printer.
+is_bb_installed() {
+    if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then
+        return 0
+    fi
+    if [ -f "$CONFIG_DIR/printer.cfg" ] && grep -q '\[include bunnybox_macros.cfg\]' "$CONFIG_DIR/printer.cfg"; then
+        return 0
+    fi
+    return 1
+}
+
+# Restore pre-install printer.cfg and gcode_macro.cfg from the oldest
+# backup_hh_* directory (presumed closest to stock), while preserving the
+# current bunnybox state in a new backup_revert_<ts> directory so the revert
+# itself can be undone.
+revert_to_stock() {
+    echo ""
+    echo "==> Reverting to stock configuration..."
+
+    local oldest
+    oldest=$(ls -1d "$CONFIG_DIR"/backup_hh_* 2>/dev/null | sort | head -n 1)
+    if [ -z "$oldest" ] || [ ! -d "$oldest" ]; then
+        echo "Error: No backup_hh_* directory found in $CONFIG_DIR."
+        echo "Cannot revert — no pre-install backup exists."
+        exit 1
+    fi
+    if [ ! -f "$oldest/printer.cfg" ]; then
+        echo "Error: $oldest has no printer.cfg; cannot revert."
+        exit 1
+    fi
+    if grep -q '\[include bunnybox_macros.cfg\]' "$oldest/printer.cfg"; then
+        echo "Warning: $oldest/printer.cfg already references bunnybox_macros.cfg;"
+        echo "it may not represent a pre-install state. Aborting to be safe."
+        exit 1
+    fi
+    echo "Using backup: $oldest"
+
+    local ts revert_dir
+    ts=$(date +"%Y%m%d_%H%M%S")
+    revert_dir="$CONFIG_DIR/backup_revert_$ts"
+    mkdir -p "$revert_dir"
+
+    if [ -f "$CONFIG_DIR/printer.cfg" ];       then cp "$CONFIG_DIR/printer.cfg" "$revert_dir/"; fi
+    if [ -f "$CONFIG_DIR/gcode_macro.cfg" ];   then cp "$CONFIG_DIR/gcode_macro.cfg" "$revert_dir/"; fi
+    if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then mv "$CONFIG_DIR/bunnybox_macros.cfg" "$revert_dir/"; fi
+    if [ -d "$CONFIG_DIR/mmu" ];               then mv "$CONFIG_DIR/mmu" "$revert_dir/"; fi
+    echo "Current bunnybox state preserved in $revert_dir"
+
+    cp "$oldest/printer.cfg" "$CONFIG_DIR/"
+    if [ -f "$oldest/gcode_macro.cfg" ]; then cp "$oldest/gcode_macro.cfg" "$CONFIG_DIR/"; fi
+
+    if [ -f "$CONFIG_DIR/saved_variables.cfg" ]; then
+        local tmp_sv
+        tmp_sv=$(mktemp)
+        sed '/^mmu__revision[[:space:]]*=/d' "$CONFIG_DIR/saved_variables.cfg" > "$tmp_sv"
+        mv "$tmp_sv" "$CONFIG_DIR/saved_variables.cfg"
+    fi
+
+    echo "Restored printer.cfg and gcode_macro.cfg from $oldest"
+
+    echo ""
+    echo "==> Restarting Klipper..."
+    if command -v sudo >/dev/null 2>&1; then
+        sudo systemctl restart klipper || echo "Failed to restart klipper automatically. Please restart it manually."
+        sudo systemctl restart moonraker || echo "Failed to restart moonraker."
+    fi
+
+    echo ""
+    echo "========================================================="
+    echo "   Revert complete — stock configuration restored.       "
+    echo "========================================================="
+    echo "To reinstall bunnybox / Happy Hare, simply re-run this script."
+    exit 0
+}
+
 if [ ! -d "$SCRIPT_DIR/config_hh-standalone" ]; then
     echo "==> Standalone execution detected. Downloading configuration files..."
     TEMP_DIR=$(mktemp -d)
@@ -106,14 +181,28 @@ echo "========================================================="
 echo "   Happy Hare + Qidi Q2 Automatic Installer "
 echo "========================================================="
 echo ""
-echo "This script will automate the installation of Happy Hare"
-echo "and configure your Qidi Q2 for standalone usage."
-echo "Please ensure you have read the README."
-echo ""
-read -p "Do you want to continue? (y/n) " -n 1 -r </dev/tty
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    exit 1
+
+if is_bb_installed; then
+    echo "Existing Happy Hare / bunnybox install detected."
+    echo "  1) Reinstall / update (re-apply configuration)"
+    echo "  2) Revert to stock (restore pre-install printer.cfg and gcode_macro.cfg)"
+    echo "  3) Cancel"
+    read -p "Select [1/2/3, default 1]: " BB_ACTION </dev/tty
+    case "$BB_ACTION" in
+        2) revert_to_stock ;;
+        3) echo "Cancelled."; exit 0 ;;
+        *) echo "Proceeding with reinstall." ;;
+    esac
+else
+    echo "This script will automate the installation of Happy Hare"
+    echo "and configure your Qidi Q2 for standalone usage."
+    echo "Please ensure you have read the README."
+    echo ""
+    read -p "Do you want to continue? (y/n) " -n 1 -r </dev/tty
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
 fi
 
 echo ""
