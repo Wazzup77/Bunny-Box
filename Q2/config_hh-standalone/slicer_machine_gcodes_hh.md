@@ -87,7 +87,6 @@ M140 S0
 DISABLE_ALL_SENSOR
 G1 E-3 F1800
 G0 Z{max_layer_z + 3} F600
-UNLOAD_FILAMENT T=[current_extruder]
 G0 Y270 F12000
 G0 X90 Y270 F12000
 {if max_layer_z < max_print_height / 2}G1 Z{max_print_height / 2 + 10} F600{else}G1 Z{min(max_print_height, max_layer_z + 3)}{endif}
