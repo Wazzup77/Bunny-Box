@@ -598,11 +598,6 @@ def modify_idle_timeout():
     with open(printer_cfg_path, 'r') as f:
         content = f.read()
 
-    # Idempotent guard: re-running the installer must not double-wrap.
-    if 'printer.mmu.drying_state' in content:
-        print("[idle_timeout] already has drying state exclusion - skipping.")
-        return
-
     lines = content.split('\n')
     section_re = re.compile(r'^\s*\[([^\]]+)\]\s*$')
 
@@ -621,6 +616,20 @@ def modify_idle_timeout():
         if section_re.match(lines[idx]):
             end = idx
             break
+
+    # Idempotent guard: re-running the installer must not double-wrap. Scope
+    # the check to uncommented lines inside [idle_timeout] so that incidental
+    # matches elsewhere in printer.cfg (commented remnants of a prior wrap,
+    # unrelated macros that reference drying_state, etc.) don't suppress the
+    # modification.
+    already_wrapped = any(
+        'printer.mmu.drying_state' in ln
+        for ln in lines[start:end]
+        if not ln.lstrip().startswith('#')
+    )
+    if already_wrapped:
+        print("[idle_timeout] already has drying state exclusion - skipping.")
+        return
 
     gcode_idx = -1
     for idx in range(start + 1, end):
