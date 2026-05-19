@@ -366,6 +366,31 @@ mv "$tmp_sv" "$SV_CFG"
 echo ""
 echo "==> Modifying printer.cfg and macro files..."
 
+echo ""
+echo "==> Checking [idle_timeout] for drying state exclusion..."
+# Happy Hare's MMU_HEATER DRY=1 keeps the box heater running for hours. If the
+# stock [idle_timeout] fires during a drying cycle it will TURN_OFF_HEATERS and
+# kill the dry. Issue #29 — wrap the existing gcode so that drying-active idle
+# timeouts only zero the main printer heaters and leave the box untouched.
+APPLY_DRYING_EXCLUSION=0
+if [ -f "$CONFIG_DIR/printer.cfg" ] && grep -qE '^\[[[:space:]]*idle_timeout[[:space:]]*\]' "$CONFIG_DIR/printer.cfg"; then
+    echo "Found [idle_timeout] section in printer.cfg."
+    echo ""
+    echo "Happy Hare's filament drying (MMU_HEATER DRY=1) keeps the box heater"
+    echo "running for hours. With the stock idle_timeout gcode this will kill"
+    echo "the heaters mid-dry. The installer can wrap the gcode so that, when"
+    echo "drying is active, only extruder/heater_bed/chamber are zeroed and"
+    echo "the box heaters keep running. When not drying, the original gcode"
+    echo "runs unchanged."
+    read -p "Apply this modification? (Recommended) (Y/n) " DRYING_ANSWER </dev/tty
+    if [[ -z "$DRYING_ANSWER" ]] || [[ "$DRYING_ANSWER" =~ ^[Yy]$ ]]; then
+        APPLY_DRYING_EXCLUSION=1
+    fi
+else
+    echo "No [idle_timeout] section found in printer.cfg - skipping drying exclusion."
+fi
+export APPLY_DRYING_EXCLUSION
+
 # We use python because it handles multiline parsing and regex matching safely.
 # This prevents bash escaping issues when modifying the configuration files.
 export CONFIG_DIR
@@ -558,10 +583,138 @@ def modify_pause_resume_cancel_cfg():
         f.write('\n'.join(new_lines))
     print("Modified pause_resume_cancel.cfg successfully.")
 
+def modify_idle_timeout():
+    # Issue #29: Happy Hare's filament drying (MMU_HEATER DRY=1) keeps the box
+    # heater running for hours, but the stock [idle_timeout] gcode (Klipper's
+    # default TURN_OFF_HEATERS+M84, or Qidi's PRINT_END) will kill the heaters
+    # during the dry. Wrap whatever gcode is in [idle_timeout] so that when
+    # drying is active only the main printer heaters are zeroed; otherwise the
+    # original gcode runs unchanged.
+    if os.environ.get("APPLY_DRYING_EXCLUSION", "0") != "1":
+        return
+    if not os.path.exists(printer_cfg_path):
+        return
+
+    with open(printer_cfg_path, 'r') as f:
+        content = f.read()
+
+    # Idempotent guard: re-running the installer must not double-wrap.
+    if 'printer.mmu.drying_state' in content:
+        print("[idle_timeout] already has drying state exclusion - skipping.")
+        return
+
+    lines = content.split('\n')
+    section_re = re.compile(r'^\s*\[([^\]]+)\]\s*$')
+
+    start = -1
+    for idx, ln in enumerate(lines):
+        m = section_re.match(ln)
+        if m and m.group(1).strip() == 'idle_timeout':
+            start = idx
+            break
+    if start < 0:
+        print("No [idle_timeout] section in printer.cfg - skipping drying exclusion.")
+        return
+
+    end = len(lines)
+    for idx in range(start + 1, len(lines)):
+        if section_re.match(lines[idx]):
+            end = idx
+            break
+
+    gcode_idx = -1
+    for idx in range(start + 1, end):
+        if re.match(r'^\s*gcode\s*:', lines[idx]):
+            gcode_idx = idx
+            break
+
+    DRY_ON = [
+        "SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0",
+        "SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0",
+        "SET_HEATER_TEMPERATURE HEATER=chamber TARGET=0",
+    ]
+    GUARD = "{% if printer.mmu is defined and printer.mmu.drying_state[0] == 'active' %}"
+    ELSE = "{% else %}"
+    ENDIF = "{% endif %}"
+
+    if gcode_idx == -1:
+        # No gcode: key in the section — Klipper falls back to its implicit
+        # default of TURN_OFF_HEATERS + M84. Insert a new gcode: block at the
+        # end of the section (before any trailing blank lines).
+        indent = '    '
+        inner = indent + '  '
+        block = ['gcode:', indent + GUARD]
+        for cmd in DRY_ON:
+            block.append(inner + cmd)
+        block.append(indent + ELSE)
+        block.append(inner + "TURN_OFF_HEATERS")
+        block.append(inner + "M84")
+        block.append(indent + ENDIF)
+
+        insert_at = end
+        while insert_at > start + 1 and lines[insert_at - 1].strip() == '':
+            insert_at -= 1
+        new_lines = lines[:insert_at] + block + lines[insert_at:]
+        with open(printer_cfg_path, 'w') as f:
+            f.write('\n'.join(new_lines))
+        print("Added gcode: block with drying state exclusion to [idle_timeout].")
+        return
+
+    # Existing gcode: block — wrap its body.
+    gcode_line = lines[gcode_idx]
+    _, inline = gcode_line.split(':', 1)
+    inline_stripped = inline.strip()
+
+    body_start = gcode_idx + 1
+    body_end = body_start
+    indent = None
+    while body_end < end:
+        ln = lines[body_end]
+        if ln.strip() == '':
+            body_end += 1
+            continue
+        if ln[:1] not in (' ', '\t'):
+            break
+        if indent is None:
+            indent = ln[:len(ln) - len(ln.lstrip())]
+        body_end += 1
+
+    # Roll back past trailing blank lines so they stay outside the wrapper.
+    while body_end - 1 >= body_start and lines[body_end - 1].strip() == '':
+        body_end -= 1
+
+    if indent is None:
+        indent = '    '
+    inner = indent + '  '
+
+    body = lines[body_start:body_end]
+    if inline_stripped:
+        body = [indent + inline_stripped] + body
+
+    wrapped = [indent + GUARD]
+    for cmd in DRY_ON:
+        wrapped.append(inner + cmd)
+    wrapped.append(indent + ELSE)
+    for b in body:
+        if b.strip() == '':
+            wrapped.append(b)
+        else:
+            wrapped.append('  ' + b)
+    wrapped.append(indent + ENDIF)
+
+    # Strip any inline content from the gcode: line — it was hoisted into body.
+    new_gcode_line = re.sub(r'^(\s*gcode\s*:).*$', r'\1', gcode_line)
+
+    new_lines = lines[:gcode_idx] + [new_gcode_line] + wrapped + lines[body_end:]
+    with open(printer_cfg_path, 'w') as f:
+        f.write('\n'.join(new_lines))
+    print("Wrapped [idle_timeout] gcode with drying state exclusion.")
+
 try:
     modify_printer_cfg()
     modify_start_end_cfg()
     modify_pause_resume_cancel_cfg()
+    modify_idle_timeout()
 except Exception as e:
     print(f"Error during python modification script: {e}")
 
