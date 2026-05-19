@@ -301,10 +301,29 @@ if [ -n "$DETECTED_SERIAL" ]; then
 fi
 
 if [ -z "$SERIAL_ID" ]; then
-    echo "Available serial devices:"
-    ls -1 /dev/serial/by-id/* 2>/dev/null || echo "No serial devices found!"
-    echo ""
-    read -p "Enter your printer's serial ID string from above (e.g., /dev/serial/by-id/usb-Klipper_...): " SERIAL_ID </dev/tty
+    SERIAL_DEVICES=()
+    while IFS= read -r dev; do
+        SERIAL_DEVICES+=("$dev")
+    done < <(find /dev/serial/by-id -mindepth 1 -maxdepth 1 2>/dev/null | sort)
+
+    if [ ${#SERIAL_DEVICES[@]} -eq 0 ]; then
+        echo "No serial devices found in /dev/serial/by-id"
+        echo ""
+        read -p "Enter your printer's serial ID path manually: " SERIAL_ID </dev/tty
+    else
+        echo "Available serial devices:"
+        for i in "${!SERIAL_DEVICES[@]}"; do
+            printf "  %d) %s\n" "$((i+1))" "${SERIAL_DEVICES[$i]}"
+        done
+        echo ""
+        read -p "Select serial device (1-${#SERIAL_DEVICES[@]}, or paste a full path): " SERIAL_SELECTION </dev/tty
+        if [[ "$SERIAL_SELECTION" =~ ^[0-9]+$ ]] && [ "$SERIAL_SELECTION" -ge 1 ] && [ "$SERIAL_SELECTION" -le "${#SERIAL_DEVICES[@]}" ]; then
+            SERIAL_ID="${SERIAL_DEVICES[$((SERIAL_SELECTION-1))]}"
+            echo "Selected: $SERIAL_ID"
+        else
+            SERIAL_ID="$SERIAL_SELECTION"
+        fi
+    fi
 fi
 if [ -n "$SERIAL_ID" ]; then
     MMU_CFG="$CONFIG_DIR/mmu/base/mmu.cfg"
