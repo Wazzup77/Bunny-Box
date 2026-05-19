@@ -11,6 +11,37 @@ set -e
 # repository or standalone (e.g., via wget or curl).
 # =========================================================================
 
+# Parse command-line arguments. --revert makes the script non-interactive
+# (suitable for use in other scripts) by skipping the menu and running the
+# revert flow directly.
+REVERT_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --revert)
+            REVERT_ONLY=1
+            ;;
+        -h|--help)
+            cat <<EOF
+Usage: $(basename "$0") [--revert] [--help]
+
+Options:
+  --revert    Restore the pre-install printer.cfg / gcode_macro.cfg from the
+              oldest backup_hh_* directory and exit. Non-interactive — safe
+              to call from other scripts.
+  -h, --help  Show this help message and exit.
+
+With no arguments, runs the interactive installer.
+EOF
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            echo "Use --help for usage." >&2
+            exit 1
+            ;;
+    esac
+done
+
 # Ensure the script is not run as root. Klipper and the user configuration
 # are expected to be owned and managed by the normal user (e.g. 'mks').
 if [ "$EUID" -eq 0 ]; then
@@ -32,22 +63,26 @@ fi
 # Ensure required tools are present. Qidi firmware images often ship without
 # git, and the standalone mode also needs unzip + curl/wget. Auto-install any
 # missing packages via apt-get (Qidi printers are Debian-based).
-echo "==> Checking dependencies..."
-NEEDED=()
-command -v git     >/dev/null 2>&1 || NEEDED+=(git)
-command -v python3 >/dev/null 2>&1 || NEEDED+=(python3)
-command -v unzip   >/dev/null 2>&1 || NEEDED+=(unzip)
-if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-    NEEDED+=(curl)
-fi
-if [ ${#NEEDED[@]} -gt 0 ]; then
-    echo "Installing missing packages: ${NEEDED[*]}"
-    if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update || echo "Warning: apt-get update failed, continuing..."
-        sudo apt-get install -y "${NEEDED[@]}"
-    else
-        echo "Error: Cannot auto-install (need sudo + apt-get). Install manually: ${NEEDED[*]}"
-        exit 1
+# Skipped in --revert mode: revert needs none of these tools and we don't want
+# scripted callers to trigger an apt-get just to roll back.
+if [ "$REVERT_ONLY" -eq 0 ]; then
+    echo "==> Checking dependencies..."
+    NEEDED=()
+    command -v git     >/dev/null 2>&1 || NEEDED+=(git)
+    command -v python3 >/dev/null 2>&1 || NEEDED+=(python3)
+    command -v unzip   >/dev/null 2>&1 || NEEDED+=(unzip)
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        NEEDED+=(curl)
+    fi
+    if [ ${#NEEDED[@]} -gt 0 ]; then
+        echo "Installing missing packages: ${NEEDED[*]}"
+        if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update || echo "Warning: apt-get update failed, continuing..."
+            sudo apt-get install -y "${NEEDED[@]}"
+        else
+            echo "Error: Cannot auto-install (need sudo + apt-get). Install manually: ${NEEDED[*]}"
+            exit 1
+        fi
     fi
 fi
 
@@ -141,6 +176,16 @@ revert_to_stock() {
     echo "To reinstall bunnybox / Happy Hare, simply re-run this script."
     exit 0
 }
+
+# Non-interactive revert path (--revert flag): run the revert flow now and
+# exit. revert_to_stock calls `exit 0` on success, so control never returns.
+if [ "$REVERT_ONLY" -eq 1 ]; then
+    if ! is_bb_installed; then
+        echo "No bunnybox / Happy Hare install detected — nothing to revert."
+        exit 1
+    fi
+    revert_to_stock
+fi
 
 if [ ! -d "$SCRIPT_DIR/config_hh-standalone" ]; then
     echo "==> Standalone execution detected. Downloading configuration files..."

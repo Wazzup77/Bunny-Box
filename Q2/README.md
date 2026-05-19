@@ -15,6 +15,34 @@ The script will backup your configurations, download the necessary files, prompt
 
 Don't forget to update the machine gcodes in the slicer to use the ones provided in the [slicer_machine_gcodes.md](./config_hh-standalone/slicer_machine_gcodes.md).
 
+## REVERTING TO STOCK
+
+The installer script doubles as the uninstaller. Re-run it on a printer where bunnybox / Happy Hare is already installed and it will offer a revert option:
+
+```bash
+wget -qO - https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/Q2/install-bb-q2.sh | bash
+```
+
+When the menu appears, choose **2) Revert to stock**. The script will:
+- restore `printer.cfg` and `gcode_macro.cfg` from the oldest `backup_hh_*` directory (your pre-install snapshot),
+- move the current `bunnybox_macros.cfg` and `mmu/` folder into a new `backup_revert_<timestamp>/` so the revert itself can be undone,
+- clear `mmu__revision` from `saved_variables.cfg`, and
+- restart Klipper and Moonraker with `sudo systemctl restart klipper` or a power cycle.
+
+### Non-interactive revert (for scripts)
+
+If you want to call the revert from another script, pass `--revert` to skip the menu entirely:
+
+```bash
+# Standalone (one-liner)
+wget -qO - https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/Q2/install-bb-q2.sh | bash -s -- --revert
+
+# Or from a cloned repo
+./install-bb-q2.sh --revert
+```
+
+Use `--help` to see all flags. The revert leaves the cloned `~/Happy-Hare/` repo and the custom `aht10.py` module on disk; they are harmless once `printer.cfg` no longer references them.
+
 ## MANUAL INSTALLATION
 
 ### HAPPY HARE INSTALLATION
