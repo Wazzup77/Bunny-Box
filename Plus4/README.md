@@ -143,6 +143,24 @@ logging: False
 ```
 Other mmu directories should not be included!
 
+5. **Recommended:** Wrap the `[idle_timeout]` gcode so it does not kill the box heaters during a Happy Hare drying cycle (`MMU_HEATER DRY=1`). Without this, an `idle_timeout` shorter than your drying cycle will turn off the heaters mid-dry. Stock Qidi ships with `timeout: 43200` (12 hours), so this only matters if you've shortened the timeout or want to dry for longer than 12 hours.
+
+```diff
+[idle_timeout]
+timeout: 43200
+gcode:
+-    PRINT_END
++    {% if printer.mmu is defined and printer.mmu.drying_state[0] == 'active' %}
++      SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0
++      SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0
++      SET_HEATER_TEMPERATURE HEATER=chamber TARGET=0
++    {% else %}
++      PRINT_END
++    {% endif %}
+```
+
+   If your `[idle_timeout]` section only has `timeout:` and no `gcode:` block, you are relying on Klipper's implicit default of `TURN_OFF_HEATERS` + `M84`. Add the wrapped block to the section, with `TURN_OFF_HEATERS` and `M84` as the `{% else %}` branch.
+
 </details>
 
 ### STEP 3: gcode_macro.cfg CHANGES
