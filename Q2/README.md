@@ -21,6 +21,34 @@ Don't forget to update the machine gcodes in the slicer to use the ones provided
 > [!CAUTION]
 > **The installer does NOT calibrate your MMU.** After installation you MUST calibrate before your first print — see [CALIBRATION — REQUIRED BEFORE FIRST USE](#-calibration--required-before-first-use) at the bottom of this guide. This is the most commonly missed step.
 
+## REVERTING TO STOCK
+
+The installer script doubles as the uninstaller. Re-run it on a printer where bunnybox / Happy Hare is already installed and it will offer a revert option:
+
+```bash
+wget -qO - https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/Q2/install-bb-q2.sh | bash
+```
+
+When the menu appears, choose **2) Revert to stock**. The script will:
+- restore `printer.cfg` and `gcode_macro.cfg` from the oldest `backup_hh_*` directory (your pre-install snapshot),
+- move the current `bunnybox_macros.cfg` and `mmu/` folder into a new `backup_revert_<timestamp>/` so the revert itself can be undone,
+- clear `mmu__revision` from `saved_variables.cfg`, and
+- restart Klipper and Moonraker with `sudo systemctl restart klipper` or a power cycle.
+
+### Non-interactive revert (for scripts)
+
+If you want to call the revert from another script, pass `--revert` to skip the menu entirely:
+
+```bash
+# Standalone (one-liner)
+wget -qO - https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/Q2/install-bb-q2.sh | bash -s -- --revert
+
+# Or from a cloned repo
+./install-bb-q2.sh --revert
+```
+
+Use `--help` to see all flags. The revert leaves the cloned `~/Happy-Hare/` repo and the custom `aht10.py` module on disk; they are harmless once `printer.cfg` no longer references them.
+
 ## MANUAL INSTALLATION
 
 ### HAPPY HARE INSTALLATION
@@ -110,6 +138,24 @@ event_delay: 3.0          # event delay time
 pause_delay: 0.5          # pause delay time
 switch_pin:!THR:PA1       # Detect switch pin
 ```
+
+5. **Recommended:** Wrap the `[idle_timeout]` gcode so it does not kill the box heaters during a Happy Hare drying cycle (`MMU_HEATER DRY=1`). Without this, an `idle_timeout` shorter than your drying cycle will turn off the heaters mid-dry. Stock Qidi ships with `timeout: 43200` (12 hours), so this only matters if you've shortened the timeout or want to dry for longer than 12 hours.
+
+```diff
+[idle_timeout]
+timeout: 43200
+gcode:
+-    PRINT_END
++    {% if printer.mmu is defined and printer.mmu.drying_state[0] == 'active' %}
++      SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0
++      SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0
++      SET_HEATER_TEMPERATURE HEATER=chamber TARGET=0
++    {% else %}
++      PRINT_END
++    {% endif %}
+```
+
+   If your `[idle_timeout]` section only has `timeout:` and no `gcode:` block, you are relying on Klipper's implicit default of `TURN_OFF_HEATERS` + `M84`. Add the wrapped block to the section, with `TURN_OFF_HEATERS` and `M84` as the `{% else %}` branch.
 
 </details>
 

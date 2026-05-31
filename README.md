@@ -68,7 +68,11 @@ No! Qidi Box already runs Klipper (Qidi's fork). Since the Box is a slave to the
 <details>
 <summary> How do I go back to the stock firmware?  </summary>
 
-Just replace the `gcode_macros.cfg` and `printer.cfg` files with the backed up stock ones and restart Klipper.
+Re-run the installer script for your printer ([Plus4](Plus4/install-bb-p4.sh), [Q2](Q2/install-bb-q2.sh), [Max4](Max4/install-bb-max4.sh)). If it detects an existing bunnybox install it will offer **2) Revert to stock**, which restores `printer.cfg` and the stock macro file from the oldest `backup_hh_*` directory and clears `mmu__revision`. The current bunnybox state is preserved in a new `backup_revert_<timestamp>/` so the revert itself can be undone.
+
+To script the revert (no menu prompt), pass `--revert` to the installer — see the "Reverting to stock" section in each printer's README ([Plus4](Plus4/README.md#reverting-to-stock), [Q2](Q2/README.md#reverting-to-stock), [Max4](Max4/README.md#reverting-to-stock)).
+
+If no `backup_hh_*` directory exists (e.g. the install was done manually), restore your own backups of `printer.cfg` and `gcode_macro.cfg` (or `klipper-macros-qd/` on Max4), delete the `mmu/` folder and `bunnybox_macros.cfg` from your config directory, remove the `mmu__revision` line from `saved_variables.cfg`, and restart Klipper.
 
 </details>
 
