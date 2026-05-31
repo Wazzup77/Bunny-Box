@@ -127,6 +127,16 @@ revert_to_stock() {
 
     echo "Restored printer.cfg and gcode_macro.cfg from $oldest"
 
+    KLIPPY_PY="$HOME/klipper/klippy/klippy.py"
+    if [ -f "${KLIPPY_PY}.bunnybox.bak" ]; then
+        echo "Restoring original klippy.py from ${KLIPPY_PY}.bunnybox.bak"
+        KLIPPY_SUDO=""
+        if [ ! -w "$KLIPPY_PY" ] && command -v sudo >/dev/null 2>&1; then
+            KLIPPY_SUDO="sudo"
+        fi
+        $KLIPPY_SUDO mv "${KLIPPY_PY}.bunnybox.bak" "$KLIPPY_PY"
+    fi
+
     echo ""
     echo "==> Restarting Klipper..."
     if command -v sudo >/dev/null 2>&1; then
@@ -197,6 +207,10 @@ else
     echo "This script will automate the installation of Happy Hare"
     echo "and configure your Qidi Q2 for standalone usage."
     echo "Please ensure you have read the README."
+    echo ""
+    echo "IMPORTANT: Unload all filament from the box BEFORE installing."
+    echo "After install you cannot load/unload until calibration, and gear"
+    echo "calibration needs the filament cut flush at the gate (not loaded)."
     echo ""
     read -p "Do you want to continue? (y/n) " -n 1 -r </dev/tty
     echo
@@ -536,6 +550,65 @@ except Exception as e:
 EOF
 
 echo ""
+echo "==> Patching klippy.py to remove QIDI box_detect dependency..."
+# QIDI's stock Klipper image ships a customised klippy.py that imports the
+# closed-source `extras/box_detect.so` and calls into it during _connect.
+# That .so is missing on mainline Klipper / Kalico / FreeDi and breaks any
+# attempt to update Python, so we strip the four QIDI-injected sites here.
+# Detection is by string match — stock/mainline/Kalico klippy.py contains
+# nothing like it and the patch is a no-op there.
+KLIPPY_PY="$HOME/klipper/klippy/klippy.py"
+if [ ! -f "$KLIPPY_PY" ]; then
+    echo "Note: klippy.py not found at $KLIPPY_PY; skipping."
+elif ! grep -q "^from extras import box_detect" "$KLIPPY_PY"; then
+    echo "No QIDI box_detect references found in klippy.py — skipping (stock/mainline/Kalico)."
+else
+    echo "QIDI box_detect references detected — patching klippy.py..."
+    KLIPPY_SUDO=""
+    if [ ! -w "$KLIPPY_PY" ] && command -v sudo >/dev/null 2>&1; then
+        KLIPPY_SUDO="sudo"
+    fi
+    KLIPPY_OWNER=""
+    KLIPPY_OWNER=$(stat -c '%U:%G' "$KLIPPY_PY" 2>/dev/null || true)
+    if [ ! -f "${KLIPPY_PY}.bunnybox.bak" ]; then
+        $KLIPPY_SUDO cp "$KLIPPY_PY" "${KLIPPY_PY}.bunnybox.bak"
+        echo "Original saved to ${KLIPPY_PY}.bunnybox.bak"
+    fi
+    tmp_klippy=$(mktemp)
+    KLIPPY_PY_PATH="$KLIPPY_PY" python3 - "$tmp_klippy" <<'PYEOF'
+import os, re, sys
+src = os.environ["KLIPPY_PY_PATH"]
+dst = sys.argv[1]
+with open(src, 'r') as f:
+    content = f.read()
+content = re.sub(r'(?m)^from extras import box_detect[ \t]*\r?\n', '', content)
+content = re.sub(r'(?m)^import pyudev, shutil, configparser[ \t]*\r?\n', '', content)
+content = re.sub(
+    r'(?m)^[ \t]*for m in \[box_detect\]:[ \t]*\r?\n[ \t]+m\.add_printer_objects\(config\)[ \t]*\r?\n',
+    '',
+    content,
+)
+content = re.sub(
+    r'(?m)^[ \t]*box_detect\.monitor_serial_devices\(self\)[ \t]*\r?\n',
+    '',
+    content,
+)
+with open(dst, 'w') as f:
+    f.write(content)
+PYEOF
+    if [ -s "$tmp_klippy" ]; then
+        $KLIPPY_SUDO mv "$tmp_klippy" "$KLIPPY_PY"
+        if [ -n "$KLIPPY_SUDO" ] && [ -n "$KLIPPY_OWNER" ]; then
+            $KLIPPY_SUDO chown "$KLIPPY_OWNER" "$KLIPPY_PY" || echo "Warning: failed to restore ownership of klippy.py"
+        fi
+        echo "Patched klippy.py — QIDI box_detect references removed."
+    else
+        echo "Error: patched klippy.py would be empty; aborting patch."
+        rm -f "$tmp_klippy"
+    fi
+fi
+
+echo ""
 echo "==> Environment Sensor Installation..."
 read -p "Do you want to install the custom AHT10 environment sensor module? (Recommended) (Y/n) " INSTALL_AHT10 </dev/tty
 if [[ -z "$INSTALL_AHT10" ]] || [[ "$INSTALL_AHT10" =~ ^[Yy]$ ]]; then
@@ -600,4 +673,24 @@ echo "Note: The installer added [duplicate_pin_override] so the stock"
 echo "[filament_switch_sensor] and the MMU can share THR:PA1. For the"
 echo "cleanest setup you may comment out the stock [filament_switch_sensor"
 echo "filament_switch_sensor] section once the MMU is verified working."
+echo ""
+echo "#########################################################"
+echo "##                                                     ##"
+echo "##   !!  STOP  -  CALIBRATION IS REQUIRED  !!          ##"
+echo "##                                                     ##"
+echo "#########################################################"
+echo ""
+echo "Happy Hare is INSTALLED but NOT yet CALIBRATED. It will NOT"
+echo "load filament or print reliably until you calibrate it."
+echo ""
+echo "On the Q2 you MUST do this before your first print:"
+echo "  1. GEAR calibration -> MMU_CALIBRATE_GEAR"
+echo ""
+echo "Optional (recommended later): MMU_CALIBRATE_BOWDEN"
+echo ""
+echo "Follow the step-by-step CALIBRATION section in the README, and the"
+echo "official guide here:"
+echo "  https://github.com/moggieuk/Happy-Hare/wiki/MMU-Calibration-TypeB"
+echo ""
+echo "#########################################################"
 echo ""
