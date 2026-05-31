@@ -9,6 +9,9 @@
 
 # INSTALLATION
 
+> [!IMPORTANT]
+> **Unload all filament from the box before you start.** Once Happy Hare is installed you cannot load or unload filament until [calibration](#-calibration--required-before-first-use) is done, and gear calibration has to be performed with the filament cut flush at the gate — not fully loaded. Unload every gate now, while the stock Qidi firmware is still in control.
+
 ## AUTO INSTALLATION
 
 The easiest way to install Happy Hare on your Qidi Max4 is to use the provided automated script. 
@@ -21,6 +24,9 @@ The easiest way to install Happy Hare on your Qidi Max4 is to use the provided a
    
 The script will backup your configurations, download the necessary files, prompt you for your serial ID, and automatically install Happy Hare.
 Don't forget to update the machine gcodes in the slicer to use the ones provided in the [slicer_machine_gcodes.md](./config_hh-standalone/slicer_machine_gcodes.md).
+
+> [!CAUTION]
+> **The installer does NOT calibrate your MMU.** After installation you MUST calibrate before your first print — see [CALIBRATION — REQUIRED BEFORE FIRST USE](#-calibration--required-before-first-use) at the bottom of this guide. This is the most commonly missed step.
 
 ## MANUAL INSTALLATION
 
@@ -192,10 +198,9 @@ Use the [following machine g-codes](./config_hh-standalone/slicer_machine_gcodes
 <details>
 <summary> ENVIRONMENT SENSOR </summary>
 
-To be able to view temperature and humidity in the printer web interface reliably, you need to install a aht10.py module from modern Klipper. 
+> If you are on mainline Klipper, Freedi or Kalico, you can skip this step altogether, though it won't hurt anything if you do it. I recommend doing this step for stability, but you can skip it by changing the `[temperature_sensor box1_env]` `sensor_type` to `AHT10` in the `mmu_hardware.cfg`. 
 
-> [!NOTE]
-> I recommend doing this step for stability, but you can skip it by changing the `[temperature_sensor box1_env]` `sensor_type` to `AHT10` in the `mmu_hardware.cfg`. If you are on mainline Klipper, Freedi or Kalico, you can skip this step altogether, though it won't hurt anything if you do it.
+To be able to view temperature and humidity in the printer web interface reliably, you need to install a aht10.py module from modern Klipper. 
 
 1. Go to the Klipper directory and clone the module
 
@@ -208,6 +213,18 @@ To be able to view temperature and humidity in the printer web interface reliabl
 ```
 
 </details>
+
+# ⚠️ CALIBRATION — REQUIRED BEFORE FIRST USE
+
+> [!CAUTION]
+> **Happy Hare will NOT load filament or print reliably until it is calibrated.** Whether you used the auto installer or installed manually, calibration is a separate, mandatory step done once after installation, before your first print. It is the single most commonly missed step.
+
+On the Max4 (no encoder):
+
+- **Gear calibration** (`MMU_CALIBRATE_GEAR`) — ✅ **REQUIRED**
+- Bowden length (`MMU_CALIBRATE_BOWDEN`) — *optional*
+
+Follow the official [Happy Hare — Type B Calibration wiki](https://github.com/moggieuk/Happy-Hare/wiki/MMU-Calibration-TypeB) for the exact procedure and commands.
 
 # ADDITIONAL TUNING
 
