@@ -119,7 +119,7 @@ Yes! Please create a PR. If you are able to make a distint configuration (e.g. f
 
 <details>
 <summary> I love this mod! Happy Hare is great! How can I make it even better!? </summary>
-Get a [proportional sensor](https://github.com/kashine6/Proportional-Sync-Feedback-Sensor) and use it instead of the stock filament tangle sensor.
+Fit a [proportional filament sensor (PFS)](addons/PFS) in place of the stock filament tangle sensor — it gives Happy Hare analog sync-feedback for tighter gear/extruder syncing and smarter clog/tangle detection. See [addons/PFS](addons/PFS/README.md) for the build, wiring and calibration guide.
 
 </details>
 
