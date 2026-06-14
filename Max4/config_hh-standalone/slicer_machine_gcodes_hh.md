@@ -118,7 +118,7 @@ G92 E0
 G92 E0
 G1 E-[retraction_length] F1800
 G2 Z{layer_z + 0.4} I0.86 J0.86 P1 F20000 ; spiral lift a little
-MOVE_TO_TRASH
+BOX_MOVE_TO_TRASH
 {if layer_z <=25}
 G1 Z25
 {endif}
