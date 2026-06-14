@@ -456,16 +456,22 @@ def modify_printer_cfg():
 
     lines = content.split('\n')
     in_hall_sensor = False
+    in_fila_sensor = False
     new_lines = []
-    
-    # These properties from the stock filament width sensor MUST be disabled
-    # or they will conflict directly with the MMU operation.
+
+    # These properties from the stock filament sensors MUST be disabled or they
+    # conflict with MMU operation. Happy Hare handles runout itself, so leaving
+    # pause_on_runout: True on a stock sensor lets it pause prints outside HH's
+    # control (and on the Qidi screen that pause can turn into a full cancel).
+    # The Plus4 has BOTH a [hall_filament_width_sensor] (ADC PA2/PA3) and a
+    # [filament_switch_sensor fila] (microswitch on PC3); both must be neutralised.
     lines_to_comment = [
         'min_diameter',
         'use_current_dia_while_delay',
         'runout_gcode',
         'RESET_FILAMENT_WIDTH_SENSOR',
         'M118 Filament run out',
+        'Filament tangle detected',
         'can_auto_reload',
         'AUTO_RELOAD_FILAMENT',
         '{% endif %}',
@@ -475,27 +481,25 @@ def modify_printer_cfg():
     ]
 
     for line in lines:
-        if line.strip().startswith('[hall_filament_width_sensor]'):
-            in_hall_sensor = True
+        stripped = line.strip()
+        if stripped.startswith('[hall_filament_width_sensor]'):
+            in_hall_sensor, in_fila_sensor = True, False
             new_lines.append(line)
             continue
-        elif in_hall_sensor and line.strip().startswith('['):
-            in_hall_sensor = False
+        elif stripped.startswith('[filament_switch_sensor fila]'):
+            in_hall_sensor, in_fila_sensor = False, True
+            new_lines.append(line)
+            continue
+        elif (in_hall_sensor or in_fila_sensor) and stripped.startswith('['):
+            in_hall_sensor = in_fila_sensor = False
 
-        if in_hall_sensor and line.strip():
-            if not line.strip().startswith('#'):
-                # Explicitly set pause_on_runout to False instead of commenting it out,
-                # because Klipper defaults to True when the line is commented out.
-                if 'pause_on_runout' in line:
-                    line = 'pause_on_runout: False'
-                else:
-                    should_comment = False
-                    for p in lines_to_comment:
-                        if p in line:
-                            should_comment = True
-                            break
-                    if should_comment:
-                        line = '# ' + line
+        if (in_hall_sensor or in_fila_sensor) and stripped and not stripped.startswith('#'):
+            # Explicitly set pause_on_runout to False instead of commenting it out,
+            # because Klipper defaults to True when the line is commented out.
+            if 'pause_on_runout' in line:
+                line = 'pause_on_runout: False'
+            elif any(p in line for p in lines_to_comment):
+                line = '# ' + line
 
         new_lines.append(line)
 

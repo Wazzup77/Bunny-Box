@@ -142,6 +142,19 @@ logging: False
 -pause_delay: 0.5
 ```
 
+3b. **Also disable the stock filament-tangle switch.** Separately from the hall sensor, the Plus4 has a `[filament_switch_sensor fila]` section (a microswitch on `switch_pin: U_1:PC3`). It ships with `pause_on_runout: True`, so it can pause the print on its own when it trips — independently of the MMU — and Happy Hare warns about it at every boot (`Warning: filament_switch_sensor 'fila' found in printer configuration...`). Happy Hare handles runout via its own sensors, so set `pause_on_runout` to `False` (do not just comment the line — Klipper defaults it back to `True`) and comment out the `runout_gcode`:
+```diff
+[filament_switch_sensor fila]
+-pause_on_runout: True
++pause_on_runout: False
+-runout_gcode:
+-    M118 Filament tangle detected
+-event_delay: 3.0
+-pause_delay: 0.5
+switch_pin: U_1:PC3
+```
+   The auto-installer now does this for you; this step is only needed for manual installs, or for existing installs set up before this was added.
+
 4. Make sure Happy Hare files were included during install in printer.cfg: 
 ```
 [include mmu/base/*.cfg]
