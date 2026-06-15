@@ -121,37 +121,48 @@ is_bb_installed() {
 # =========================================================================
 # Smart update machinery
 # =========================================================================
-# When updating an existing install we must not blindly overwrite the user's
-# config: it holds hand-tuned parameters AND Happy Hare's calibration/state.
-# Instead we keep a pristine snapshot of what we last shipped (the merge
-# "base") in $CONFIG_DIR/.bunnybox_base plus a manifest recording the source
-# git commit. On the next update we have all three legs of a 3-way merge
-# locally (base / yours / new) without needing git history on the printer,
-# and we can also show the upstream changelog from the recorded commit.
+# IMPORTANT — division of labour with Happy Hare's own installer:
+#
+# After we copy configs, this script runs Happy Hare's install.sh in upgrade
+# mode (INSTALL=0). HH's copy_config_files() then OWNS most of the mmu/ tree:
+#   - mmu_cut_tip/form_tip/sequence/purge/leds/software/state.cfg and
+#     optional/*.cfg are replaced with SYMLINKS into ~/Happy-Hare/config.
+#   - mmu_parameters.cfg / mmu_macro_vars.cfg / addon configs are re-templated
+#     with your existing values harvested forward.
+#   - mmu_vars.cfg (calibration) is kept if it already exists.
+# So a Bunny Box 3-way merge on those files is pointless (HH overwrites them)
+# and dangerous (writing onto a symlink would corrupt the HH clone).
+#
+# HH does NOT touch the files Bunny Box genuinely owns:
+#   - mmu/base/mmu_hardware.cfg  (Qidi pins — kept frozen in upgrade mode)
+#   - mmu/base/mmu.cfg           (serial + base — kept)
+#   - mmu/addons/*_hw.cfg        (Qidi cutter/eject pins — kept if present)
+#   - bunnybox_macros.cfg        (top-level Qidi integration — HH never sees it)
+#
+# These owned files are exactly where a smart merge has value: HH leaves them
+# alone, so without us new Bunny Box hardware/macro defaults would never reach
+# an existing install. We snapshot just these as the merge "base" in
+# $CONFIG_DIR/.bunnybox_base, so base/yours/new share one lineage and merge
+# cleanly. mmu_vars.cfg is left untouched (HH preserves it). Everything else is
+# delegated to HH's installer.
 
 # Marker/manifest locations inside the Klipper config directory. Dot-prefixed
 # so Klipper's [include ...] globs never pick them up.
 BB_BASE_DIR="$CONFIG_DIR/.bunnybox_base"
 BB_MANIFEST="$CONFIG_DIR/.bunnybox_manifest"
 
-# Files that hold runtime/calibration state. These are NEVER merged or
-# overwritten on update — only created if missing. mmu_vars.cfg is Happy
-# Hare's calibration + state store (encoder, gear rotation distance, gate
-# maps); clobbering it forces a full re-calibration.
-BB_PRESERVE_FILES="mmu/mmu_vars.cfg"
-
-bb_is_preserve() {
-    case " $BB_PRESERVE_FILES " in *" $1 "*) return 0 ;; esac
-    return 1
-}
-
-# Print the set of files we ship into the config dir, relative to the variant
-# directory. We only manage the mmu/ tree and bunnybox_macros.cfg (the variant
-# also contains README/slicer docs that are not copied to the printer).
-bb_shipped_files() {
-    ( cd "$SCRIPT_DIR/$CONFIG_VARIANT" 2>/dev/null && \
-        find . -type f \( -path './mmu/*' -o -name 'bunnybox_macros.cfg' \) \
-        | sed 's#^\./##' | sort )
+# The set of files Bunny Box owns and smart-merges, relative to the variant
+# directory. Restricted to what HH's installer keeps frozen (see above) — the
+# rest of mmu/ is HH's responsibility. addons/*_hw.cfg is expanded per install.
+bb_managed_files() {
+    (
+        cd "$SCRIPT_DIR/$CONFIG_VARIANT" 2>/dev/null || return 0
+        local f
+        for f in bunnybox_macros.cfg mmu/base/mmu.cfg mmu/base/mmu_hardware.cfg \
+                 mmu/addons/*_hw.cfg; do
+            [ -f "$f" ] && echo "$f"
+        done | sort -u
+    )
 }
 
 # Show the upstream config changelog between the recorded commit and HEAD.
@@ -184,8 +195,10 @@ bb_report_list() {
     for f in "$@"; do echo "      - $f"; done
 }
 
-# The core smart update. Walks every shipped file and decides, per file,
-# whether to keep, auto-update, 3-way merge, or ask the user.
+# The core smart update. Walks the Bunny Box-owned files (bb_managed_files)
+# and decides, per file, whether to keep, auto-update, 3-way merge, or ask.
+# Files outside this set (HH logic/params/calibration) are left for Happy
+# Hare's own installer, which runs immediately after.
 smart_update_configs() {
     local src="$SCRIPT_DIR/$CONFIG_VARIANT"
     local have_base=0
@@ -193,16 +206,17 @@ smart_update_configs() {
 
     # Report buckets (global so they survive the loop / nested logic).
     R_UPDATED=(); R_MERGED=(); R_KEPT=(); R_TOOKNEW=()
-    R_MARKERS=(); R_ADDED=(); R_PRESERVED=(); R_REMOVED=()
+    R_MARKERS=(); R_ADDED=(); R_REMOVED=()
 
     echo ""
-    echo "==> Smart update: merging new configuration with your existing setup..."
+    echo "==> Smart update: merging Bunny Box hardware/macro config with your setup..."
+    echo "    (Happy Hare's logic, parameters and calibration are upgraded separately"
+    echo "    by its own installer, run next.)"
     if [ "$have_base" -eq 0 ]; then
         echo "    No base snapshot found (this printer was set up before smart-update"
         echo "    support). A 3-way merge isn't possible, so for any file that differs"
-        echo "    you'll be asked whether to keep yours or take the new one. Your"
-        echo "    calibration (mmu_vars.cfg) is always kept, and a full backup already"
-        echo "    exists in $BACKUP_DIR."
+        echo "    you'll be asked whether to keep yours or take the new one. A full"
+        echo "    backup already exists in $BACKUP_DIR."
     fi
     bb_print_changelog
 
@@ -214,17 +228,16 @@ smart_update_configs() {
         bcopy="$BB_BASE_DIR/$rel"
         mkdir -p "$(dirname "$mine")"
 
-        # 1. Calibration/state files: never touch an existing one.
-        if bb_is_preserve "$rel"; then
-            if [ ! -f "$mine" ]; then
-                cp "$new" "$mine"; R_ADDED+=("$rel (state template)")
-            else
-                R_PRESERVED+=("$rel")
-            fi
+        # Safety: never write through a symlink. A managed file shouldn't be a
+        # symlink (HH only symlinks the logic files we don't manage), but if it
+        # somehow is, a cp would write into the symlink target (e.g. the
+        # ~/Happy-Hare clone). Skip and warn instead.
+        if [ -L "$mine" ]; then
+            echo "  Skipping $rel — it is a symlink (managed elsewhere)."
             continue
         fi
 
-        # 2. Brand-new file we didn't ship before.
+        # 1. Brand-new file we didn't ship before.
         if [ ! -f "$mine" ]; then
             cp "$new" "$mine"; R_ADDED+=("$rel"); continue
         fi
@@ -291,7 +304,7 @@ smart_update_configs() {
                 *)      echo "    Please choose k, n, or d." ;;
             esac
         done
-    done < <(bb_shipped_files)
+    done < <(bb_managed_files)
 
     # Report files that existed in the old base but are gone upstream. We do
     # not delete them automatically (they may be user-added or still wanted).
@@ -313,23 +326,24 @@ smart_update_configs() {
     bb_report_list "Replaced with new version"                "${R_TOOKNEW[@]}"
     bb_report_list "Conflict copies to resolve manually"      "${R_MARKERS[@]}"
     bb_report_list "New files added"                          "${R_ADDED[@]}"
-    bb_report_list "Calibration/state preserved"              "${R_PRESERVED[@]}"
     bb_report_list "Removed upstream (left in place for you)" "${R_REMOVED[@]}"
     echo "  ------------------------------------------------"
     echo "  Full backup of your previous config: $BACKUP_DIR"
 }
 
-# Record what we just installed: a pristine snapshot of the shipped config
+# Record what we just installed: a pristine snapshot of the Bunny Box-owned
 # files (the merge base for the NEXT update) and a manifest with the source
-# git commit. Called on both fresh installs and updates so the base always
-# tracks the version currently on disk.
+# git commit. Only the managed files are snapshotted, so base/yours/new stay
+# on one lineage (HH-managed files are deliberately excluded — see
+# bb_managed_files). Called on both fresh installs and updates.
 write_install_manifest() {
     rm -rf "$BB_BASE_DIR"
-    mkdir -p "$BB_BASE_DIR/mmu"
-    cp -r "$SCRIPT_DIR/$CONFIG_VARIANT/mmu/." "$BB_BASE_DIR/mmu/"
-    if [ -f "$SCRIPT_DIR/$CONFIG_VARIANT/bunnybox_macros.cfg" ]; then
-        cp "$SCRIPT_DIR/$CONFIG_VARIANT/bunnybox_macros.cfg" "$BB_BASE_DIR/"
-    fi
+    local rel
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        mkdir -p "$BB_BASE_DIR/$(dirname "$rel")"
+        cp "$SCRIPT_DIR/$CONFIG_VARIANT/$rel" "$BB_BASE_DIR/$rel"
+    done < <(bb_managed_files)
     local commit="unknown"
     if git -C "$SCRIPT_DIR" rev-parse HEAD >/dev/null 2>&1; then
         commit=$(git -C "$SCRIPT_DIR" rev-parse HEAD)

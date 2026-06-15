@@ -79,16 +79,19 @@ If no `backup_hh_*` directory exists (e.g. the install was done manually), resto
 <details>
 <summary> How do I update without losing my tuning and calibration? </summary>
 
-Just re-run the installer for your printer. When it detects an existing install and you choose **1) Reinstall / update**, it no longer overwrites your config wholesale. Instead it does a **smart, 3-way merge** against a snapshot of what it last installed (kept in `printer_data/config/.bunnybox_base`, recorded by a `.bunnybox_manifest`):
+Just re-run the installer for your printer. When it detects an existing install and you choose **1) Reinstall / update**, your config is no longer overwritten wholesale. The update is split between two installers that own different parts of the config:
 
-* **Your calibration is never touched** — `mmu/mmu_vars.cfg` (encoder, gear rotation distance, gate maps) is always preserved.
+**Happy Hare's own installer** handles everything it manages: the MMU *logic* files (`mmu_cut_tip.cfg`, `mmu_sequence.cfg`, `mmu_software.cfg`, …, which it installs as symlinks into `~/Happy-Hare`), and your *parameters* (`mmu_parameters.cfg`, `mmu_macro_vars.cfg`, addon configs), whose values it carries forward as it upgrades them. **Your calibration (`mmu/mmu_vars.cfg`) is left untouched.** This is why the bundled copies of those files in this repo can look "behind" — they're only reference snapshots; the live versions come from the Happy Hare fork at install time.
+
+**Bunny Box's smart merge** handles only the files Happy Hare leaves frozen and that Bunny Box truly owns: `mmu_hardware.cfg` (Qidi pins), `mmu.cfg`, the addon `*_hw.cfg` hardware files, and the top-level `bunnybox_macros.cfg`. For these it does a **3-way merge** against a snapshot of what it last installed (`printer_data/config/.bunnybox_base`, recorded by a `.bunnybox_manifest`):
+
 * Files you never edited but that changed upstream are **updated to the new defaults** automatically.
 * Files you edited but that didn't change upstream are **left exactly as you have them**.
-* Files where your edits *and* the new defaults overlap are **merged**; if they collide on the same lines the installer **asks you per file** whether to keep yours, take the new version, or write a `*.bbmerge` copy with conflict markers for you to resolve by hand.
+* Files where your edits *and* the new defaults overlap are **merged**; if they collide on the same lines the installer **asks you per file** whether to keep yours, take the new version, or write a `*.bbmerge` copy with conflict markers to resolve by hand.
 
-When run from a git clone it also prints a short **changelog** of the config commits between your installed version and the latest, so you can see *what* changed and *why*. A full backup is still saved to `backup_hh_<timestamp>/` every time, so any update is reversible.
+When run from a git clone it also prints a short **changelog** of the config commits between your installed version and the latest. A full backup is still saved to `backup_hh_<timestamp>/` every time, so any update is reversible.
 
-> Note: this currently ships on the **Plus4** installer. The Q2 and Max4 installers still do a backup-and-replace on update (your files are saved to `backup_hh_<timestamp>/` but not auto-merged) until the smart update is ported to them.
+> Note: the Bunny Box smart merge currently ships on the **Plus4** installer. The Q2 and Max4 installers still do a backup-and-replace for the Bunny Box-owned files (saved to `backup_hh_<timestamp>/`) until it's ported to them; Happy Hare's own logic/parameter upgrade applies on all three.
 
 </details>
 
