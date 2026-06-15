@@ -614,7 +614,7 @@ else
 fi
 
 echo ""
-echo "==> Installing Happy Hare from WIP repo..."
+echo "==> Installing Happy Hare from Qidi Box fork..."
 # Install the core Happy Hare software from its repository on the 'bunnybox' branch.
 HH_DIR="$HOME/Happy-Hare"
 if [ -d "$HH_DIR" ]; then

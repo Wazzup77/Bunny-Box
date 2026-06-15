@@ -74,7 +74,7 @@ This will give you a list of USB devices. It should say something like:
 
 Copy that into your mmu.cfg in the `serial:` parameter, replacing the old value.
 
-4. Install Happy Hare from the [WIP repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
+4. Install Happy Hare from the [Qidi Box fork](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
 
 ```bash
 cd ~

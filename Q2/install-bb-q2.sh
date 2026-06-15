@@ -614,21 +614,21 @@ else
 fi
 
 echo ""
-echo "==> Installing Happy Hare..."
-# Install the core Happy Hare software from its repository.
+echo "==> Installing Happy Hare from Qidi Box fork..."
+# Install the core Happy Hare software from its repository on the 'bunnybox' branch.
 HH_DIR="$HOME/Happy-Hare"
 if [ -d "$HH_DIR" ]; then
     echo "Happy-Hare repository already exists at $HH_DIR. Pulling latest..."
     cd "$HH_DIR"
     git fetch
-    git checkout main
+    git checkout bunnybox
     git pull --rebase || {
-        echo "Warning: git pull failed. Resetting to match remote..."
-        git reset --hard origin/main
+        echo "Warning: git pull failed (likely due to upstream rebase). Resetting to match remote..."
+        git reset --hard origin/bunnybox
     }
     cd - >/dev/null
 else
-    git clone https://github.com/moggieuk/Happy-Hare.git "$HH_DIR"
+    git clone -b bunnybox https://github.com/Wazzup77/Happy-Hare.git "$HH_DIR"
 fi
 
 echo "Running Happy Hare install script..."
