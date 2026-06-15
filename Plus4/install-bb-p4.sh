@@ -53,6 +53,11 @@ fi
 PRINTER_DATA_DIR="$HOME/printer_data"
 CONFIG_DIR="$PRINTER_DATA_DIR/config"
 
+# Set to 1 when we detect an existing install and the user chooses to update.
+# Drives the smart-merge path instead of a blind overwrite (see
+# smart_update_configs below).
+BB_UPDATE=0
+
 # Verify that the expected configuration directory exists.
 if [ ! -d "$CONFIG_DIR" ]; then
     echo "Could not find Klipper config directory at $CONFIG_DIR"
@@ -113,6 +118,231 @@ is_bb_installed() {
     return 1
 }
 
+# =========================================================================
+# Smart update machinery
+# =========================================================================
+# When updating an existing install we must not blindly overwrite the user's
+# config: it holds hand-tuned parameters AND Happy Hare's calibration/state.
+# Instead we keep a pristine snapshot of what we last shipped (the merge
+# "base") in $CONFIG_DIR/.bunnybox_base plus a manifest recording the source
+# git commit. On the next update we have all three legs of a 3-way merge
+# locally (base / yours / new) without needing git history on the printer,
+# and we can also show the upstream changelog from the recorded commit.
+
+# Marker/manifest locations inside the Klipper config directory. Dot-prefixed
+# so Klipper's [include ...] globs never pick them up.
+BB_BASE_DIR="$CONFIG_DIR/.bunnybox_base"
+BB_MANIFEST="$CONFIG_DIR/.bunnybox_manifest"
+
+# Files that hold runtime/calibration state. These are NEVER merged or
+# overwritten on update — only created if missing. mmu_vars.cfg is Happy
+# Hare's calibration + state store (encoder, gear rotation distance, gate
+# maps); clobbering it forces a full re-calibration.
+BB_PRESERVE_FILES="mmu/mmu_vars.cfg"
+
+bb_is_preserve() {
+    case " $BB_PRESERVE_FILES " in *" $1 "*) return 0 ;; esac
+    return 1
+}
+
+# Print the set of files we ship into the config dir, relative to the variant
+# directory. We only manage the mmu/ tree and bunnybox_macros.cfg (the variant
+# also contains README/slicer docs that are not copied to the printer).
+bb_shipped_files() {
+    ( cd "$SCRIPT_DIR/$CONFIG_VARIANT" 2>/dev/null && \
+        find . -type f \( -path './mmu/*' -o -name 'bunnybox_macros.cfg' \) \
+        | sed 's#^\./##' | sort )
+}
+
+# Show the upstream config changelog between the recorded commit and HEAD.
+# Only possible when the installer is run from a git clone (not standalone
+# zip) and a previous manifest recorded a real commit.
+bb_print_changelog() {
+    [ -f "$BB_MANIFEST" ] || return 0
+    local oldc newc
+    oldc=$(grep -E '^BB_COMMIT=' "$BB_MANIFEST" 2>/dev/null | head -n1 | cut -d= -f2 || true)
+    [ -n "$oldc" ] && [ "$oldc" != "unknown" ] || return 0
+    git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+    git -C "$SCRIPT_DIR" cat-file -e "${oldc}^{commit}" 2>/dev/null || return 0
+    newc=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || true)
+    if [ "$oldc" = "$newc" ]; then
+        echo "    Configs are already at the latest commit (${newc:0:8})."
+        return 0
+    fi
+    echo ""
+    echo "    Upstream config changes since your install (${oldc:0:8} -> ${newc:0:8}):"
+    git -C "$SCRIPT_DIR" log --oneline "${oldc}..HEAD" -- "$CONFIG_VARIANT" 2>/dev/null \
+        | sed 's/^/      /' || true
+}
+
+# Pretty-print one report category (skips empty categories).
+bb_report_list() {
+    local title="$1"; shift
+    [ "$#" -eq 0 ] && return 0
+    echo "    $title:"
+    local f
+    for f in "$@"; do echo "      - $f"; done
+}
+
+# The core smart update. Walks every shipped file and decides, per file,
+# whether to keep, auto-update, 3-way merge, or ask the user.
+smart_update_configs() {
+    local src="$SCRIPT_DIR/$CONFIG_VARIANT"
+    local have_base=0
+    [ -d "$BB_BASE_DIR" ] && have_base=1
+
+    # Report buckets (global so they survive the loop / nested logic).
+    R_UPDATED=(); R_MERGED=(); R_KEPT=(); R_TOOKNEW=()
+    R_MARKERS=(); R_ADDED=(); R_PRESERVED=(); R_REMOVED=()
+
+    echo ""
+    echo "==> Smart update: merging new configuration with your existing setup..."
+    if [ "$have_base" -eq 0 ]; then
+        echo "    No base snapshot found (this printer was set up before smart-update"
+        echo "    support). A 3-way merge isn't possible, so for any file that differs"
+        echo "    you'll be asked whether to keep yours or take the new one. Your"
+        echo "    calibration (mmu_vars.cfg) is always kept, and a full backup already"
+        echo "    exists in $BACKUP_DIR."
+    fi
+    bb_print_changelog
+
+    local rel new mine bcopy merged ans
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        new="$src/$rel"
+        mine="$CONFIG_DIR/$rel"
+        bcopy="$BB_BASE_DIR/$rel"
+        mkdir -p "$(dirname "$mine")"
+
+        # 1. Calibration/state files: never touch an existing one.
+        if bb_is_preserve "$rel"; then
+            if [ ! -f "$mine" ]; then
+                cp "$new" "$mine"; R_ADDED+=("$rel (state template)")
+            else
+                R_PRESERVED+=("$rel")
+            fi
+            continue
+        fi
+
+        # 2. Brand-new file we didn't ship before.
+        if [ ! -f "$mine" ]; then
+            cp "$new" "$mine"; R_ADDED+=("$rel"); continue
+        fi
+
+        # 3. Already identical to the new version — nothing to do.
+        if cmp -s "$mine" "$new"; then continue; fi
+
+        # 4. We have a merge base for this file -> classify precisely.
+        if [ "$have_base" -eq 1 ] && [ -f "$bcopy" ]; then
+            if cmp -s "$new" "$bcopy"; then
+                # Upstream unchanged; the difference is the user's own edit.
+                R_KEPT+=("$rel (your customisation, no upstream change)")
+                continue
+            fi
+            if cmp -s "$mine" "$bcopy"; then
+                # User never edited it; upstream changed -> adopt new default.
+                cp "$new" "$mine"; R_UPDATED+=("$rel"); continue
+            fi
+            # Both sides changed -> attempt a clean 3-way merge.
+            merged=$(mktemp)
+            if git merge-file -p "$mine" "$bcopy" "$new" > "$merged" 2>/dev/null; then
+                cp "$merged" "$mine"; rm -f "$merged"; R_MERGED+=("$rel"); continue
+            fi
+            rm -f "$merged"
+            # Conflict -> ask the user.
+            echo ""
+            echo "  CONFLICT: $rel"
+            echo "    Your edits overlap with new upstream changes in the same place."
+            while true; do
+                echo "      [k] keep YOUR version (default)"
+                echo "      [n] take the NEW version (your file is safe in the backup)"
+                echo "      [m] write a merged copy with <<< conflict markers >>> to"
+                echo "          ${rel}.bbmerge (your live file is left untouched)"
+                echo "      [d] show the merge with markers, then ask again"
+                read -p "    Choose [k/n/m/d]: " ans </dev/tty || ans="k"
+                case "${ans:-k}" in
+                    k|K|"") R_KEPT+=("$rel (conflict — kept yours)"); break ;;
+                    n|N)    cp "$new" "$mine"; R_TOOKNEW+=("$rel"); break ;;
+                    m|M)    git merge-file -p --diff3 "$mine" "$bcopy" "$new" \
+                                > "${mine}.bbmerge" 2>/dev/null || true
+                            R_MARKERS+=("${rel}.bbmerge"); break ;;
+                    d|D)    git merge-file -p --diff3 "$mine" "$bcopy" "$new" 2>/dev/null \
+                                | sed 's/^/      | /' || true ;;
+                    *)      echo "    Please choose k, n, m, or d." ;;
+                esac
+            done
+            continue
+        fi
+
+        # 5. No merge base for this file: differs, can't merge -> ask.
+        echo ""
+        echo "  CHANGED (no merge base): $rel"
+        echo "    Your file differs from the new version and there is no recorded"
+        echo "    base to merge against."
+        while true; do
+            echo "      [k] keep YOUR version (default)"
+            echo "      [n] take the NEW version (your file is safe in the backup)"
+            echo "      [d] show the diff (yours vs new), then ask again"
+            read -p "    Choose [k/n/d]: " ans </dev/tty || ans="k"
+            case "${ans:-k}" in
+                k|K|"") R_KEPT+=("$rel (no base — kept yours)"); break ;;
+                n|N)    cp "$new" "$mine"; R_TOOKNEW+=("$rel"); break ;;
+                d|D)    diff -u "$mine" "$new" | sed 's/^/      | /' || true ;;
+                *)      echo "    Please choose k, n, or d." ;;
+            esac
+        done
+    done < <(bb_shipped_files)
+
+    # Report files that existed in the old base but are gone upstream. We do
+    # not delete them automatically (they may be user-added or still wanted).
+    if [ "$have_base" -eq 1 ]; then
+        local brel
+        while IFS= read -r brel; do
+            [ -n "$brel" ] || continue
+            if [ ! -f "$src/$brel" ] && [ -f "$CONFIG_DIR/$brel" ]; then
+                R_REMOVED+=("$brel")
+            fi
+        done < <( cd "$BB_BASE_DIR" 2>/dev/null && find . -type f | sed 's#^\./##' | sort )
+    fi
+
+    echo ""
+    echo "  ---------------- Update summary ----------------"
+    bb_report_list "Auto-updated (no local edits)"            "${R_UPDATED[@]}"
+    bb_report_list "Merged (your edits + new defaults)"       "${R_MERGED[@]}"
+    bb_report_list "Kept your version"                        "${R_KEPT[@]}"
+    bb_report_list "Replaced with new version"                "${R_TOOKNEW[@]}"
+    bb_report_list "Conflict copies to resolve manually"      "${R_MARKERS[@]}"
+    bb_report_list "New files added"                          "${R_ADDED[@]}"
+    bb_report_list "Calibration/state preserved"              "${R_PRESERVED[@]}"
+    bb_report_list "Removed upstream (left in place for you)" "${R_REMOVED[@]}"
+    echo "  ------------------------------------------------"
+    echo "  Full backup of your previous config: $BACKUP_DIR"
+}
+
+# Record what we just installed: a pristine snapshot of the shipped config
+# files (the merge base for the NEXT update) and a manifest with the source
+# git commit. Called on both fresh installs and updates so the base always
+# tracks the version currently on disk.
+write_install_manifest() {
+    rm -rf "$BB_BASE_DIR"
+    mkdir -p "$BB_BASE_DIR/mmu"
+    cp -r "$SCRIPT_DIR/$CONFIG_VARIANT/mmu/." "$BB_BASE_DIR/mmu/"
+    if [ -f "$SCRIPT_DIR/$CONFIG_VARIANT/bunnybox_macros.cfg" ]; then
+        cp "$SCRIPT_DIR/$CONFIG_VARIANT/bunnybox_macros.cfg" "$BB_BASE_DIR/"
+    fi
+    local commit="unknown"
+    if git -C "$SCRIPT_DIR" rev-parse HEAD >/dev/null 2>&1; then
+        commit=$(git -C "$SCRIPT_DIR" rev-parse HEAD)
+    fi
+    cat > "$BB_MANIFEST" <<EOF
+BB_PRINTER=Plus4
+BB_VARIANT=$CONFIG_VARIANT
+BB_COMMIT=$commit
+BB_INSTALL_DATE=$(date +"%Y-%m-%d %H:%M:%S")
+EOF
+    echo "==> Recorded install manifest (.bunnybox_manifest) and base snapshot (.bunnybox_base) for smart updates."
+}
+
 # Restore pre-install printer.cfg and gcode_macro.cfg from the oldest
 # backup_hh_* directory (presumed closest to stock), while preserving the
 # current bunnybox state in a new backup_revert_<ts> directory so the revert
@@ -148,6 +378,10 @@ revert_to_stock() {
     if [ -f "$CONFIG_DIR/gcode_macro.cfg" ];   then cp "$CONFIG_DIR/gcode_macro.cfg" "$revert_dir/"; fi
     if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then mv "$CONFIG_DIR/bunnybox_macros.cfg" "$revert_dir/"; fi
     if [ -d "$CONFIG_DIR/mmu" ];               then mv "$CONFIG_DIR/mmu" "$revert_dir/"; fi
+    # Stash the smart-update markers too, so a reverted (stock) config dir is
+    # left clean. They're regenerated on the next install.
+    if [ -d "$CONFIG_DIR/.bunnybox_base" ];     then mv "$CONFIG_DIR/.bunnybox_base" "$revert_dir/"; fi
+    if [ -f "$CONFIG_DIR/.bunnybox_manifest" ]; then mv "$CONFIG_DIR/.bunnybox_manifest" "$revert_dir/"; fi
     echo "Current bunnybox state preserved in $revert_dir"
 
     cp "$oldest/printer.cfg" "$CONFIG_DIR/"
@@ -238,6 +472,7 @@ echo "========================================================="
 echo ""
 
 if is_bb_installed; then
+    BB_UPDATE=1
     echo "Existing Happy Hare / bunnybox install detected."
     echo "  1) Reinstall / update (re-apply configuration)"
     echo "  2) Revert to stock (restore pre-install printer.cfg and gcode_macro.cfg)"
@@ -273,7 +508,9 @@ mkdir -p "$BACKUP_DIR"
 
 if [ -f "$CONFIG_DIR/printer.cfg" ]; then cp "$CONFIG_DIR/printer.cfg" "$BACKUP_DIR/"; fi
 if [ -f "$CONFIG_DIR/gcode_macro.cfg" ]; then cp "$CONFIG_DIR/gcode_macro.cfg" "$BACKUP_DIR/"; fi
-if [ -d "$CONFIG_DIR/mmu" ]; then mv "$CONFIG_DIR/mmu" "$BACKUP_DIR/"; fi
+# Copy (don't move) the mmu/ tree: the smart-update merge below reads the live
+# config in place, so it must stay. A full copy here is still the safety net.
+if [ -d "$CONFIG_DIR/mmu" ]; then cp -r "$CONFIG_DIR/mmu" "$BACKUP_DIR/"; fi
 if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then cp "$CONFIG_DIR/bunnybox_macros.cfg" "$BACKUP_DIR/"; fi
 echo "Backups saved to $BACKUP_DIR"
 
@@ -286,13 +523,23 @@ if [ ! -d "$SCRIPT_DIR/$CONFIG_VARIANT" ]; then
     exit 1
 fi
 
-echo ""
-echo "==> Copying configuration files from $CONFIG_VARIANT..."
-# Copy the Happy Hare MMU directory from the chosen variant into Klipper config
-cp -r "$SCRIPT_DIR/$CONFIG_VARIANT/mmu" "$CONFIG_DIR/"
-# Copy the custom macros specific to the Plus4 integration
-cp "$SCRIPT_DIR/$CONFIG_VARIANT/bunnybox_macros.cfg" "$CONFIG_DIR/"
-echo "Configurations copied."
+if [ "$BB_UPDATE" -eq 1 ]; then
+    # Existing install: merge new defaults into the user's config instead of
+    # overwriting, preserving customisations and calibration.
+    smart_update_configs
+else
+    echo ""
+    echo "==> Copying configuration files from $CONFIG_VARIANT..."
+    # Copy the Happy Hare MMU directory from the chosen variant into Klipper config
+    cp -r "$SCRIPT_DIR/$CONFIG_VARIANT/mmu" "$CONFIG_DIR/"
+    # Copy the custom macros specific to the Plus4 integration
+    cp "$SCRIPT_DIR/$CONFIG_VARIANT/bunnybox_macros.cfg" "$CONFIG_DIR/"
+    echo "Configurations copied."
+fi
+
+# Record the manifest + pristine base snapshot so the NEXT update can do a
+# 3-way merge and show a changelog. Runs for both fresh installs and updates.
+write_install_manifest
 
 echo ""
 echo "==> Configuring Serial Address..."

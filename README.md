@@ -77,6 +77,22 @@ If no `backup_hh_*` directory exists (e.g. the install was done manually), resto
 </details>
 
 <details>
+<summary> How do I update without losing my tuning and calibration? </summary>
+
+Just re-run the installer for your printer. When it detects an existing install and you choose **1) Reinstall / update**, it no longer overwrites your config wholesale. Instead it does a **smart, 3-way merge** against a snapshot of what it last installed (kept in `printer_data/config/.bunnybox_base`, recorded by a `.bunnybox_manifest`):
+
+* **Your calibration is never touched** — `mmu/mmu_vars.cfg` (encoder, gear rotation distance, gate maps) is always preserved.
+* Files you never edited but that changed upstream are **updated to the new defaults** automatically.
+* Files you edited but that didn't change upstream are **left exactly as you have them**.
+* Files where your edits *and* the new defaults overlap are **merged**; if they collide on the same lines the installer **asks you per file** whether to keep yours, take the new version, or write a `*.bbmerge` copy with conflict markers for you to resolve by hand.
+
+When run from a git clone it also prints a short **changelog** of the config commits between your installed version and the latest, so you can see *what* changed and *why*. A full backup is still saved to `backup_hh_<timestamp>/` every time, so any update is reversible.
+
+> Note: this currently ships on the **Plus4** installer. The Q2 and Max4 installers still do a backup-and-replace on update (your files are saved to `backup_hh_<timestamp>/` but not auto-merged) until the smart update is ported to them.
+
+</details>
+
+<details>
 <summary> Can you add support for my printer? </summary>
 
 I only have a Plus4 and so can't really make other printers work. There are people with the Q2 who are using Bunny Box though, so that will likely come soon. For the Max4, I don't have one, so that will only come if someone else makes it. As for older ones/non-Qidi printers, you're on your own - I don't have one and think it's unlikely anyone will make one for you.
