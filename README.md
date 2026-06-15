@@ -91,7 +91,7 @@ Just re-run the installer for your printer. When it detects an existing install 
 
 When run from a git clone it also prints a short **changelog** of the config commits between your installed version and the latest. A full backup is still saved to `backup_hh_<timestamp>/` every time, so any update is reversible.
 
-> Note: the Bunny Box smart merge currently ships on the **Plus4** installer. The Q2 and Max4 installers still do a backup-and-replace for the Bunny Box-owned files (saved to `backup_hh_<timestamp>/`) until it's ported to them; Happy Hare's own logic/parameter upgrade applies on all three.
+> Note: the Bunny Box smart merge now ships on all three installers (**Plus4**, **Q2** and **Max4**). Plus4 installs Happy Hare from the [`bunnybox` fork](https://github.com/Wazzup77/Happy-Hare); Q2 and Max4 install mainline Happy Hare. In all cases Happy Hare's installer owns the logic/parameter upgrade and Bunny Box's smart merge owns the hardware/macro layer.
 
 </details>
 
