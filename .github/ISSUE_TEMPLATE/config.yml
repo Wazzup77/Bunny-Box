@@ -1,0 +1,3 @@
+# Set to false to force everyone to use one of the templates above
+# (removes the "Open a blank issue" link).
+blank_issues_enabled: true

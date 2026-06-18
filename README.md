@@ -77,6 +77,25 @@ If no `backup_hh_*` directory exists (e.g. the install was done manually), resto
 </details>
 
 <details>
+<summary> How do I update without losing my tuning and calibration? </summary>
+
+Just re-run the installer for your printer. When it detects an existing install and you choose **1) Reinstall / update**, your config is no longer overwritten wholesale. The update is split between two installers that own different parts of the config:
+
+**Happy Hare's own installer** handles everything it manages: the MMU *logic* files (`mmu_cut_tip.cfg`, `mmu_sequence.cfg`, `mmu_software.cfg`, …, which it installs as symlinks into `~/Happy-Hare`), and your *parameters* (`mmu_parameters.cfg`, `mmu_macro_vars.cfg`, addon configs), whose values it carries forward as it upgrades them. **Your calibration (`mmu/mmu_vars.cfg`) is left untouched.** This is why the bundled copies of those files in this repo can look "behind" — they're only reference snapshots; the live versions come from the Happy Hare fork at install time.
+
+**Bunny Box's smart merge** handles only the files Happy Hare leaves frozen and that Bunny Box truly owns: `mmu_hardware.cfg` (Qidi pins), `mmu.cfg`, the addon `*_hw.cfg` hardware files, and the top-level `bunnybox_macros.cfg`. For these it does a **3-way merge** against a snapshot of what it last installed (`printer_data/config/.bunnybox_base`, recorded by a `.bunnybox_manifest`):
+
+* Files you never edited but that changed upstream are **updated to the new defaults** automatically.
+* Files you edited but that didn't change upstream are **left exactly as you have them**.
+* Files where your edits *and* the new defaults overlap are **merged**; if they collide on the same lines the installer **asks you per file** whether to keep yours, take the new version, or write a `*.bbmerge` copy with conflict markers to resolve by hand.
+
+When run from a git clone it also prints a short **changelog** of the config commits between your installed version and the latest. A full backup is still saved to `backup_hh_<timestamp>/` every time, so any update is reversible.
+
+> Note: the Bunny Box smart merge now ships on all three installers (**Plus4**, **Q2** and **Max4**). Plus4 installs Happy Hare from the [`bunnybox` fork](https://github.com/Wazzup77/Happy-Hare); Q2 and Max4 install mainline Happy Hare. In all cases Happy Hare's installer owns the logic/parameter upgrade and Bunny Box's smart merge owns the hardware/macro layer.
+
+</details>
+
+<details>
 <summary> Can you add support for my printer? </summary>
 
 I only have a Plus4 and so can't really make other printers work. There are people with the Q2 who are using Bunny Box though, so that will likely come soon. For the Max4, I don't have one, so that will only come if someone else makes it. As for older ones/non-Qidi printers, you're on your own - I don't have one and think it's unlikely anyone will make one for you.
@@ -119,7 +138,7 @@ Yes! Please create a PR. If you are able to make a distint configuration (e.g. f
 
 <details>
 <summary> I love this mod! Happy Hare is great! How can I make it even better!? </summary>
-Get a [proportional sensor](https://github.com/kashine6/Proportional-Sync-Feedback-Sensor) and use it instead of the stock filament tangle sensor.
+Fit a [proportional filament sensor (PFS)](addons/PFS) in place of the stock filament tangle sensor — it gives Happy Hare analog sync-feedback for tighter gear/extruder syncing and smarter clog/tangle detection. See [addons/PFS](addons/PFS/README.md) for the build, wiring and calibration guide.
 
 </details>
 

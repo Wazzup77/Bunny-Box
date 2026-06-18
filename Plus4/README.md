@@ -1,6 +1,9 @@
 
 # INSTALLATION
 
+> [!IMPORTANT]
+> **Unload all filament from the box before you start.** Once Happy Hare is installed you cannot load or unload filament until [calibration](#-calibration--required-before-first-use) is done, and gear calibration has to be performed with the filament cut flush at the gate — not fully loaded. Unload every gate now, while the stock Qidi firmware is still in control.
+
 ## AUTO INSTALLATION
 
 The easiest way to install Happy Hare on your Qidi Plus4 is to use the provided automated script. 
@@ -13,6 +16,9 @@ The easiest way to install Happy Hare on your Qidi Plus4 is to use the provided 
    
 The script will backup your configurations, download the necessary files, prompt you for your serial ID, and automatically install Happy Hare.
 Don't forget to update the machine gcodes in the slicer to use the ones provided in the [slicer_machine_gcodes.md](./config_hh-standalone/slicer_machine_gcodes.md).
+
+> [!CAUTION]
+> **The installer does NOT calibrate your MMU.** After installation you MUST calibrate before your first print — see [CALIBRATION — REQUIRED BEFORE FIRST USE](#-calibration--required-before-first-use) at the bottom of this guide. This is the most commonly missed step.
 
 ## REVERTING TO STOCK
 
@@ -68,7 +74,7 @@ This will give you a list of USB devices. It should say something like:
 
 Copy that into your mmu.cfg in the `serial:` parameter, replacing the old value.
 
-4. Install Happy Hare from the [WIP repo](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
+4. Install Happy Hare from the [Qidi Box fork](https://github.com/Wazzup77/Happy-Hare). To do this, connect to your printer via SSH and run:
 
 ```bash
 cd ~
@@ -135,6 +141,19 @@ logging: False
 -event_delay: 3.0
 -pause_delay: 0.5
 ```
+
+3b. **Also disable the stock filament-tangle switch.** Separately from the hall sensor, the Plus4 has a `[filament_switch_sensor fila]` section (a microswitch on `switch_pin: U_1:PC3`). It ships with `pause_on_runout: True`, so it can pause the print on its own when it trips — independently of the MMU — and Happy Hare warns about it at every boot (`Warning: filament_switch_sensor 'fila' found in printer configuration...`). Happy Hare handles runout via its own sensors, so set `pause_on_runout` to `False` (do not just comment the line — Klipper defaults it back to `True`) and comment out the `runout_gcode`:
+```diff
+[filament_switch_sensor fila]
+-pause_on_runout: True
++pause_on_runout: False
+-runout_gcode:
+-    M118 Filament tangle detected
+-event_delay: 3.0
+-pause_delay: 0.5
+switch_pin: U_1:PC3
+```
+   The auto-installer now does this for you; this step is only needed for manual installs, or for existing installs set up before this was added.
 
 4. Make sure Happy Hare files were included during install in printer.cfg: 
 ```
@@ -255,10 +274,9 @@ Go into your pritner settings in the slicer and change them to use the [followin
 <details>
 <summary> ENVIRONMENT SENSOR </summary>
 
-To be able to view temperature and humidity in the printer web interface reliably, you need to install a aht10.py module from modern Klipper. 
+> If you are on mainline Klipper, Freedi or Kalico, you can skip this step altogether, though it won't hurt anything if you do it. I recommend doing this step for stability, but you can skip it by changing the `[temperature_sensor box1_env]` `sensor_type` to `AHT10` in the `mmu_hardware.cfg`. 
 
-> [!NOTE]
-> I recommend doing this step for stability, but you can skip it by changing the `[temperature_sensor box1_env]` `sensor_type` to `AHT10` in the `mmu_hardware.cfg`. If you are on mainline Klipper, Freedi or Kalico, you can skip this step altogether, though it won't hurt anything if you do it.
+To be able to view temperature and humidity in the printer web interface reliably, you need to install a aht10.py module from modern Klipper. 
 
 1. Go to the Klipper directory and clone the module
 
@@ -272,6 +290,19 @@ To be able to view temperature and humidity in the printer web interface reliabl
 
 </details>
 
+
+# ⚠️ CALIBRATION — REQUIRED BEFORE FIRST USE
+
+> [!CAUTION]
+> **Happy Hare will NOT load filament or print reliably until it is calibrated.** Whether you used the auto installer or installed manually, calibration is a separate, mandatory step done once after installation, before your first print. It is the single most commonly missed step.
+
+On the Plus4:
+
+- **Gear calibration** (`MMU_CALIBRATE_GEAR`) — ⚠️ **REQUIRED**
+- **Encoder calibration** (`MMU_CALIBRATE_ENCODER`) — ⚠️ **REQUIRED**
+- Bowden length (`MMU_CALIBRATE_BOWDEN`) and per-gate (`MMU_CALIBRATE_GATES`) — *optional*
+
+Follow the official [Happy Hare — Type B Calibration wiki](https://github.com/moggieuk/Happy-Hare/wiki/MMU-Calibration-TypeB) for the exact procedure and commands.
 
 # ADDITIONAL TUNING
 
