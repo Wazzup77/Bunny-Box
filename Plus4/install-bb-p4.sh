@@ -11,23 +11,13 @@ set -e
 # repository or standalone (e.g., via wget or curl).
 # =========================================================================
 
-# Parse command-line arguments. --revert makes the script non-interactive
-# (suitable for use in other scripts) by skipping the menu and running the
-# revert flow directly.
-REVERT_ONLY=0
 for arg in "$@"; do
     case "$arg" in
-        --revert)
-            REVERT_ONLY=1
-            ;;
         -h|--help)
             cat <<EOF
-Usage: $(basename "$0") [--revert] [--help]
+Usage: $(basename "$0") [--help]
 
 Options:
-  --revert    Restore the pre-install printer.cfg / gcode_macro.cfg from the
-              oldest backup_hh_* directory and exit. Non-interactive — safe
-              to call from other scripts.
   -h, --help  Show this help message and exit.
 
 With no arguments, runs the interactive installer.
@@ -68,26 +58,22 @@ fi
 # Ensure required tools are present. Qidi firmware images often ship without
 # git, and the standalone mode also needs unzip + curl/wget. Auto-install any
 # missing packages via apt-get (Qidi printers are Debian-based).
-# Skipped in --revert mode: revert needs none of these tools and we don't want
-# scripted callers to trigger an apt-get just to roll back.
-if [ "$REVERT_ONLY" -eq 0 ]; then
-    echo "==> Checking dependencies..."
-    NEEDED=()
-    command -v git     >/dev/null 2>&1 || NEEDED+=(git)
-    command -v python3 >/dev/null 2>&1 || NEEDED+=(python3)
-    command -v unzip   >/dev/null 2>&1 || NEEDED+=(unzip)
-    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-        NEEDED+=(curl)
-    fi
-    if [ ${#NEEDED[@]} -gt 0 ]; then
-        echo "Installing missing packages: ${NEEDED[*]}"
-        if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update || echo "Warning: apt-get update failed, continuing..."
-            sudo apt-get install -y "${NEEDED[@]}"
-        else
-            echo "Error: Cannot auto-install (need sudo + apt-get). Install manually: ${NEEDED[*]}"
-            exit 1
-        fi
+echo "==> Checking dependencies..."
+NEEDED=()
+command -v git     >/dev/null 2>&1 || NEEDED+=(git)
+command -v python3 >/dev/null 2>&1 || NEEDED+=(python3)
+command -v unzip   >/dev/null 2>&1 || NEEDED+=(unzip)
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    NEEDED+=(curl)
+fi
+if [ ${#NEEDED[@]} -gt 0 ]; then
+    echo "Installing missing packages: ${NEEDED[*]}"
+    if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update || echo "Warning: apt-get update failed, continuing..."
+        sudo apt-get install -y "${NEEDED[@]}"
+    else
+        echo "Error: Cannot auto-install (need sudo + apt-get). Install manually: ${NEEDED[*]}"
+        exit 1
     fi
 fi
 
@@ -215,8 +201,7 @@ smart_update_configs() {
     if [ "$have_base" -eq 0 ]; then
         echo "    No base snapshot found (this printer was set up before smart-update"
         echo "    support). A 3-way merge isn't possible, so for any file that differs"
-        echo "    you'll be asked whether to keep yours or take the new one. A full"
-        echo "    backup already exists in $BACKUP_DIR."
+        echo "    you'll be asked whether to keep yours or take the new one."
     fi
     bb_print_changelog
 
@@ -268,7 +253,7 @@ smart_update_configs() {
             echo "    Your edits overlap with new upstream changes in the same place."
             while true; do
                 echo "      [k] keep YOUR version (default)"
-                echo "      [n] take the NEW version (your file is safe in the backup)"
+                echo "      [n] take the NEW version (your original file is left untouched)"
                 echo "      [m] write a merged copy with <<< conflict markers >>> to"
                 echo "          ${rel}.bbmerge (your live file is left untouched)"
                 echo "      [d] show the merge with markers, then ask again"
@@ -294,7 +279,7 @@ smart_update_configs() {
         echo "    base to merge against."
         while true; do
             echo "      [k] keep YOUR version (default)"
-            echo "      [n] take the NEW version (your file is safe in the backup)"
+            echo "      [n] take the NEW version (your original file is left untouched)"
             echo "      [d] show the diff (yours vs new), then ask again"
             read -p "    Choose [k/n/d]: " ans </dev/tty || ans="k"
             case "${ans:-k}" in
@@ -328,7 +313,6 @@ smart_update_configs() {
     bb_report_list "New files added"                          "${R_ADDED[@]}"
     bb_report_list "Removed upstream (left in place for you)" "${R_REMOVED[@]}"
     echo "  ------------------------------------------------"
-    echo "  Full backup of your previous config: $BACKUP_DIR"
 }
 
 # Record what we just installed: a pristine snapshot of the Bunny Box-owned
@@ -356,94 +340,6 @@ BB_INSTALL_DATE=$(date +"%Y-%m-%d %H:%M:%S")
 EOF
     echo "==> Recorded install manifest (.bunnybox_manifest) and base snapshot (.bunnybox_base) for smart updates."
 }
-
-# Restore pre-install printer.cfg and gcode_macro.cfg from the oldest
-# backup_hh_* directory (presumed closest to stock), while preserving the
-# current bunnybox state in a new backup_revert_<ts> directory so the revert
-# itself can be undone.
-revert_to_stock() {
-    echo ""
-    echo "==> Reverting to stock configuration..."
-
-    local oldest
-    oldest=$(ls -1d "$CONFIG_DIR"/backup_hh_* 2>/dev/null | sort | head -n 1)
-    if [ -z "$oldest" ] || [ ! -d "$oldest" ]; then
-        echo "Error: No backup_hh_* directory found in $CONFIG_DIR."
-        echo "Cannot revert — no pre-install backup exists."
-        exit 1
-    fi
-    if [ ! -f "$oldest/printer.cfg" ]; then
-        echo "Error: $oldest has no printer.cfg; cannot revert."
-        exit 1
-    fi
-    if grep -q '\[include bunnybox_macros.cfg\]' "$oldest/printer.cfg"; then
-        echo "Warning: $oldest/printer.cfg already references bunnybox_macros.cfg;"
-        echo "it may not represent a pre-install state. Aborting to be safe."
-        exit 1
-    fi
-    echo "Using backup: $oldest"
-
-    local ts revert_dir
-    ts=$(date +"%Y%m%d_%H%M%S")
-    revert_dir="$CONFIG_DIR/backup_revert_$ts"
-    mkdir -p "$revert_dir"
-
-    if [ -f "$CONFIG_DIR/printer.cfg" ];       then cp "$CONFIG_DIR/printer.cfg" "$revert_dir/"; fi
-    if [ -f "$CONFIG_DIR/gcode_macro.cfg" ];   then cp "$CONFIG_DIR/gcode_macro.cfg" "$revert_dir/"; fi
-    if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then mv "$CONFIG_DIR/bunnybox_macros.cfg" "$revert_dir/"; fi
-    if [ -d "$CONFIG_DIR/mmu" ];               then mv "$CONFIG_DIR/mmu" "$revert_dir/"; fi
-    # Stash the smart-update markers too, so a reverted (stock) config dir is
-    # left clean. They're regenerated on the next install.
-    if [ -d "$CONFIG_DIR/.bunnybox_base" ];     then mv "$CONFIG_DIR/.bunnybox_base" "$revert_dir/"; fi
-    if [ -f "$CONFIG_DIR/.bunnybox_manifest" ]; then mv "$CONFIG_DIR/.bunnybox_manifest" "$revert_dir/"; fi
-    echo "Current bunnybox state preserved in $revert_dir"
-
-    cp "$oldest/printer.cfg" "$CONFIG_DIR/"
-    if [ -f "$oldest/gcode_macro.cfg" ]; then cp "$oldest/gcode_macro.cfg" "$CONFIG_DIR/"; fi
-
-    if [ -f "$CONFIG_DIR/saved_variables.cfg" ]; then
-        local tmp_sv
-        tmp_sv=$(mktemp)
-        sed '/^mmu__revision[[:space:]]*=/d' "$CONFIG_DIR/saved_variables.cfg" > "$tmp_sv"
-        mv "$tmp_sv" "$CONFIG_DIR/saved_variables.cfg"
-    fi
-
-    echo "Restored printer.cfg and gcode_macro.cfg from $oldest"
-
-    KLIPPY_PY="$HOME/klipper/klippy/klippy.py"
-    if [ -f "${KLIPPY_PY}.bunnybox.bak" ]; then
-        echo "Restoring original klippy.py from ${KLIPPY_PY}.bunnybox.bak"
-        KLIPPY_SUDO=""
-        if [ ! -w "$KLIPPY_PY" ] && command -v sudo >/dev/null 2>&1; then
-            KLIPPY_SUDO="sudo"
-        fi
-        $KLIPPY_SUDO mv "${KLIPPY_PY}.bunnybox.bak" "$KLIPPY_PY"
-    fi
-
-    echo ""
-    echo "==> Restarting Klipper..."
-    if command -v sudo >/dev/null 2>&1; then
-        sudo systemctl restart klipper || echo "Failed to restart klipper automatically. Please restart it manually."
-        sudo systemctl restart moonraker || echo "Failed to restart moonraker."
-    fi
-
-    echo ""
-    echo "========================================================="
-    echo "   Revert complete — stock configuration restored.       "
-    echo "========================================================="
-    echo "To reinstall bunnybox / Happy Hare, simply re-run this script."
-    exit 0
-}
-
-# Non-interactive revert path (--revert flag): run the revert flow now and
-# exit. revert_to_stock calls `exit 0` on success, so control never returns.
-if [ "$REVERT_ONLY" -eq 1 ]; then
-    if ! is_bb_installed; then
-        echo "No bunnybox / Happy Hare install detected — nothing to revert."
-        exit 1
-    fi
-    revert_to_stock
-fi
 
 if [ ! -d "$SCRIPT_DIR/config_hh-standalone" ]; then
     echo "==> Standalone execution detected. Downloading configuration files..."
@@ -489,12 +385,10 @@ if is_bb_installed; then
     BB_UPDATE=1
     echo "Existing Happy Hare / bunnybox install detected."
     echo "  1) Reinstall / update (re-apply configuration)"
-    echo "  2) Revert to stock (restore pre-install printer.cfg and gcode_macro.cfg)"
-    echo "  3) Cancel"
-    read -p "Select [1/2/3, default 1]: " BB_ACTION </dev/tty
+    echo "  2) Cancel"
+    read -p "Select [1/2, default 1]: " BB_ACTION </dev/tty
     case "$BB_ACTION" in
-        2) revert_to_stock ;;
-        3) echo "Cancelled."; exit 0 ;;
+        2) echo "Cancelled."; exit 0 ;;
         *) echo "Proceeding with reinstall." ;;
     esac
 else
@@ -512,21 +406,6 @@ else
         exit 1
     fi
 fi
-
-echo ""
-echo "==> Backing up files..."
-# Create a backup of existing configurations before making any changes.
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_DIR="$CONFIG_DIR/backup_hh_$TIMESTAMP"
-mkdir -p "$BACKUP_DIR"
-
-if [ -f "$CONFIG_DIR/printer.cfg" ]; then cp "$CONFIG_DIR/printer.cfg" "$BACKUP_DIR/"; fi
-if [ -f "$CONFIG_DIR/gcode_macro.cfg" ]; then cp "$CONFIG_DIR/gcode_macro.cfg" "$BACKUP_DIR/"; fi
-# Copy (don't move) the mmu/ tree: the smart-update merge below reads the live
-# config in place, so it must stay. A full copy here is still the safety net.
-if [ -d "$CONFIG_DIR/mmu" ]; then cp -r "$CONFIG_DIR/mmu" "$BACKUP_DIR/"; fi
-if [ -f "$CONFIG_DIR/bunnybox_macros.cfg" ]; then cp "$CONFIG_DIR/bunnybox_macros.cfg" "$BACKUP_DIR/"; fi
-echo "Backups saved to $BACKUP_DIR"
 
 echo ""
 echo "==> Using Configuration Variant: config_hh-standalone (Recommended)"
@@ -1052,15 +931,6 @@ if [[ -z "$INSTALL_AHT10" ]] || [[ "$INSTALL_AHT10" =~ ^[Yy]$ ]]; then
     if [ -d "$EXTRAS_DIR" ]; then
         cd "$EXTRAS_DIR"
         
-        # Backup existing file if it exists
-        if [ -f "aht10.py" ]; then
-            if command -v sudo >/dev/null 2>&1; then
-                sudo mv aht10.py aht10.py.bak
-            else
-                mv aht10.py aht10.py.bak
-            fi
-            echo "Backed up existing aht10.py to aht10.py.bak"
-        fi
         
         # Download to temp file first, verify integrity, then move into place.
         # Prefer curl -fsSL (fails on HTTP errors); fall back to wget.
