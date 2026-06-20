@@ -696,7 +696,7 @@ gcode_macro_cfg_path = os.path.join(config_dir, "gcode_macro.cfg")
 def modify_printer_cfg():
     if not os.path.exists(printer_cfg_path):
         print(f"Warning: {printer_cfg_path} not found.")
-        return
+        return None
 
     with open(printer_cfg_path, 'r') as f:
         content = f.read()
@@ -708,13 +708,25 @@ def modify_printer_cfg():
     if '[include bunnybox_macros.cfg]' not in content:
         content = '[include bunnybox_macros.cfg]\n' + content
         
-    # 3. Ensure `[duplicate_pin_override]` exists with THR:PA1 in its pins list.
+    # 3. Detect the stock filament switch sensor's pin, then ensure it is declared
+    # in `[duplicate_pin_override]`. Qidi stock names the toolhead MCU THR;
+    # FreeDi/Kalico may name it differently, so we copy whatever the stock sensor
+    # uses rather than hardcoding THR:PA1 (a wrong MCU name fails to load).
+    dup_pin = 'THR:PA1'
+    mmu_switch_pin = None
+    _sec = re.search(r'(?ms)^\[filament_switch_sensor\s+filament_switch_sensor\]\s*\n(.*?)(?=^\[|\Z)', content)
+    if _sec:
+        _pm = re.search(r'(?m)^\s*switch_pin\s*:\s*(\S+)', _sec.group(1))
+        if _pm:
+            mmu_switch_pin = _pm.group(1)             # full spec, e.g. !THR:PA1
+            dup_pin = mmu_switch_pin.lstrip('!^~')    # bare pin for the override
+
     # Klipper accepts multi-line values (indented continuation lines), so we
     # collect the full pins value (inline + continuations) and rewrite it as a
     # single comma-separated line. This also repairs a previously-broken file
     # where the installer left an orphaned continuation line after overwriting.
     if '[duplicate_pin_override]' not in content:
-        content = '[duplicate_pin_override]\npins: THR:PA1\n\n' + content
+        content = f'[duplicate_pin_override]\npins: {dup_pin}\n\n' + content
     else:
         dup_lines = content.split('\n')
         dup_new_lines = []
@@ -734,8 +746,8 @@ def modify_printer_cfg():
 
             if in_dup_section and stripped.startswith('['):
                 if not pins_emitted:
-                    if 'THR:PA1' not in pins_list:
-                        pins_list.append('THR:PA1')
+                    if dup_pin not in pins_list:
+                        pins_list.append(dup_pin)
                     dup_new_lines.append('pins: ' + ', '.join(pins_list))
                     pins_emitted = True
                 in_dup_section = False
@@ -754,8 +766,8 @@ def modify_printer_cfg():
                     continue
                 if in_pins_value:
                     if not pins_emitted:
-                        if 'THR:PA1' not in pins_list:
-                            pins_list.append('THR:PA1')
+                        if dup_pin not in pins_list:
+                            pins_list.append(dup_pin)
                         dup_new_lines.append('pins: ' + ', '.join(pins_list))
                         pins_emitted = True
                     in_pins_value = False
@@ -763,8 +775,8 @@ def modify_printer_cfg():
             dup_new_lines.append(dup_line)
 
         if in_dup_section and not pins_emitted:
-            if 'THR:PA1' not in pins_list:
-                pins_list.append('THR:PA1')
+            if dup_pin not in pins_list:
+                pins_list.append(dup_pin)
             dup_new_lines.append('pins: ' + ', '.join(pins_list))
 
         content = '\n'.join(dup_new_lines)
@@ -819,6 +831,36 @@ def modify_printer_cfg():
     with open(printer_cfg_path, 'w') as f:
         f.write('\n'.join(new_lines))
     print("Modified printer.cfg successfully.")
+    if mmu_switch_pin:
+        print(f"Detected stock filament switch pin {mmu_switch_pin} "
+              f"(duplicate_pin_override: {dup_pin}).")
+    return mmu_switch_pin
+
+def sync_extruder_switch_pin(switch_pin):
+    # Point the MMU's extruder_switch_pin at whatever pin the stock filament
+    # switch sensor used (captured by modify_printer_cfg). On Qidi stock this is
+    # !THR:PA1 and the rewrite is a no-op; on FreeDi/Kalico where the toolhead is
+    # a separate MCU under a different name, this binds the MMU to the real pin
+    # instead of a hardcoded THR that may not exist.
+    if not switch_pin:
+        print("Note: no stock [filament_switch_sensor filament_switch_sensor] switch_pin found;")
+        print("      leaving mmu_hardware.cfg extruder_switch_pin unchanged.")
+        return
+    hw_path = os.path.join(config_dir, "mmu", "base", "mmu_hardware.cfg")
+    if not os.path.exists(hw_path):
+        print(f"Note: {hw_path} not found; skipping extruder switch pin sync.")
+        return
+    # mmu_hardware.cfg contains UTF-8 box-art comments; pin encoding explicitly.
+    with open(hw_path, 'r', encoding='utf-8') as f:
+        hw = f.read()
+    hw, n = re.subn(r'(?m)^(\s*extruder_switch_pin\s*:\s*)\S+',
+                    lambda m: m.group(1) + switch_pin, hw)
+    with open(hw_path, 'w', encoding='utf-8') as f:
+        f.write(hw)
+    if n:
+        print(f"Synced MMU extruder_switch_pin from stock sensor -> {switch_pin}")
+    else:
+        print("Note: extruder_switch_pin line not found in mmu_hardware.cfg; no change.")
 
 def modify_gcode_macro_cfg():
     if not os.path.exists(gcode_macro_cfg_path):
@@ -1028,7 +1070,8 @@ def modify_idle_timeout():
     print("Wrapped [idle_timeout] gcode with drying state exclusion.")
 
 try:
-    modify_printer_cfg()
+    mmu_switch_pin = modify_printer_cfg()
+    sync_extruder_switch_pin(mmu_switch_pin)
     modify_gcode_macro_cfg()
     modify_idle_timeout()
 except Exception as e:
@@ -1157,7 +1200,8 @@ echo "Please remember to update slicer machine gcodes as specified in the README
 echo "If Happy Hare installation had any issues, check its output above."
 echo ""
 echo "Note: The installer added [duplicate_pin_override] so the stock"
-echo "[filament_switch_sensor] and the MMU can share THR:PA1. For the"
+echo "[filament_switch_sensor] and the MMU can share the toolhead sensor pin"
+echo "(detected from your printer.cfg). For the"
 echo "cleanest setup you may comment out the stock [filament_switch_sensor"
 echo "filament_switch_sensor] section once the MMU is verified working."
 echo ""

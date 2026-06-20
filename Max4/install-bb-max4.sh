@@ -700,7 +700,7 @@ pause_resume_cancel_cfg_path = os.path.join(config_dir, "klipper-macros-qd", "pa
 def modify_printer_cfg():
     if not os.path.exists(printer_cfg_path):
         print(f"Warning: {printer_cfg_path} not found.")
-        return
+        return None
 
     with open(printer_cfg_path, 'r') as f:
         content = f.read()
@@ -722,11 +722,24 @@ def modify_printer_cfg():
     if '[include mmu/optional/client_macros.cfg]' not in content:
         content = '[include mmu/optional/client_macros.cfg]\n' + content
 
-    # Ensure THR:PA0 is declared in [duplicate_pin_override]. HH's
-    # mmu_hardware.cfg uses `extruder_switch_pin: !THR:PA0`, which collides
-    # with the stock `[filament_switch_sensor filament_switch_sensor]
-    # switch_pin: !THR:PA0`. Klipper needs the pin listed in
-    # duplicate_pin_override or it errors at load.
+    # Detect the stock filament switch sensor's pin so both the MMU and the
+    # duplicate_pin_override track whatever MCU the firmware actually uses. Qidi
+    # stock names the toolhead MCU THR; FreeDi/Kalico may name it differently, in
+    # which case a hardcoded THR:PA0 would fail to load ("MCU 'THR' not found").
+    # Falls back to the THR:PA0 default if the stock sensor isn't found.
+    dup_pin = 'THR:PA0'
+    mmu_switch_pin = None
+    sec = re.search(r'(?ms)^\[filament_switch_sensor\s+filament_switch_sensor\]\s*\n(.*?)(?=^\[|\Z)', content)
+    if sec:
+        pm = re.search(r'(?m)^\s*switch_pin\s*:\s*(\S+)', sec.group(1))
+        if pm:
+            mmu_switch_pin = pm.group(1)              # full spec, e.g. !THR:PA0
+            dup_pin = mmu_switch_pin.lstrip('!^~')    # bare pin for the override, e.g. THR:PA0
+
+    # Ensure the shared pin is declared in [duplicate_pin_override]. HH's
+    # mmu_hardware.cfg uses `extruder_switch_pin: <pin>` — the same pin as the
+    # stock `[filament_switch_sensor filament_switch_sensor] switch_pin`. Klipper
+    # needs the pin listed in duplicate_pin_override or it errors at load.
     #
     # Stock Max4 printer.cfg already declares an empty `[duplicate_pin_override]`
     # section, so a naive insert creates a duplicate section and fails to parse.
@@ -736,11 +749,11 @@ def modify_printer_cfg():
         def _merge_pin(m):
             existing = m.group('pins').strip()
             if not existing:
-                return f"{m.group('header')}pins: THR:PA0"
+                return f"{m.group('header')}pins: {dup_pin}"
             pins = [p.strip() for p in existing.split(',') if p.strip()]
-            if 'THR:PA0' in pins:
+            if dup_pin in pins:
                 return m.group(0)
-            pins.append('THR:PA0')
+            pins.append(dup_pin)
             return f"{m.group('header')}pins: {', '.join(pins)}"
 
         content = re.sub(
@@ -752,7 +765,7 @@ def modify_printer_cfg():
     elif '[filament_switch_sensor filament_switch_sensor]' in content:
         content = content.replace(
             '[filament_switch_sensor filament_switch_sensor]',
-            '[duplicate_pin_override]\npins: THR:PA0\n\n[filament_switch_sensor filament_switch_sensor]',
+            f'[duplicate_pin_override]\npins: {dup_pin}\n\n[filament_switch_sensor filament_switch_sensor]',
         )
 
     lines = content.split('\n')
@@ -799,6 +812,36 @@ def modify_printer_cfg():
     with open(printer_cfg_path, 'w') as f:
         f.write('\n'.join(new_lines))
     print("Modified printer.cfg successfully.")
+    if mmu_switch_pin:
+        print(f"Detected stock filament switch pin {mmu_switch_pin} "
+              f"(duplicate_pin_override: {dup_pin}).")
+    return mmu_switch_pin
+
+def sync_extruder_switch_pin(switch_pin):
+    # Point the MMU's extruder_switch_pin at whatever pin the stock filament
+    # switch sensor used (captured by modify_printer_cfg). On Qidi stock this is
+    # !THR:PA0 and the rewrite is a no-op; on FreeDi/Kalico where the toolhead is
+    # a separate MCU under a different name, this binds the MMU to the real pin
+    # instead of a hardcoded THR that may not exist.
+    if not switch_pin:
+        print("Note: no stock [filament_switch_sensor filament_switch_sensor] switch_pin found;")
+        print("      leaving mmu_hardware.cfg extruder_switch_pin unchanged.")
+        return
+    hw_path = os.path.join(config_dir, "mmu", "base", "mmu_hardware.cfg")
+    if not os.path.exists(hw_path):
+        print(f"Note: {hw_path} not found; skipping extruder switch pin sync.")
+        return
+    # mmu_hardware.cfg contains UTF-8 box-art comments; pin encoding explicitly.
+    with open(hw_path, 'r', encoding='utf-8') as f:
+        hw = f.read()
+    hw, n = re.subn(r'(?m)^(\s*extruder_switch_pin\s*:\s*)\S+',
+                    lambda m: m.group(1) + switch_pin, hw)
+    with open(hw_path, 'w', encoding='utf-8') as f:
+        f.write(hw)
+    if n:
+        print(f"Synced MMU extruder_switch_pin from stock sensor -> {switch_pin}")
+    else:
+        print("Note: extruder_switch_pin line not found in mmu_hardware.cfg; no change.")
 
 def modify_start_end_cfg():
     if not os.path.exists(start_end_cfg_path):
@@ -1014,7 +1057,8 @@ def modify_idle_timeout():
     print("Wrapped [idle_timeout] gcode with drying state exclusion.")
 
 try:
-    modify_printer_cfg()
+    mmu_switch_pin = modify_printer_cfg()
+    sync_extruder_switch_pin(mmu_switch_pin)
     modify_start_end_cfg()
     modify_pause_resume_cancel_cfg()
     modify_idle_timeout()
@@ -1144,7 +1188,8 @@ echo "Please remember to update slicer machine gcodes as specified in the README
 echo "If Happy Hare installation had any issues, check its output above."
 echo ""
 echo "Note: The installer added [duplicate_pin_override] so the stock"
-echo "[filament_switch_sensor] and the MMU can share THR:PA0. For the"
+echo "[filament_switch_sensor] and the MMU can share the toolhead sensor pin"
+echo "(detected from your printer.cfg). For the"
 echo "cleanest setup you may comment out the stock [filament_switch_sensor"
 echo "filament_switch_sensor] section once the MMU is verified working."
 echo ""

@@ -139,6 +139,10 @@ pause_delay: 0.5          # pause delay time
 switch_pin:!THR:PA1       # Detect switch pin
 ```
 
+> **The installer does the `[duplicate_pin_override]` + pin sync for you** — it reads the stock sensor's `switch_pin` and writes it into both the override and `mmu_hardware.cfg`'s `extruder_switch_pin`. You only need this step if installing by hand.
+>
+> **FreeDi / Kalico users:** those firmwares may name the toolhead MCU something other than `THR` (e.g. `Toolhead`). If so, the stock `switch_pin` will read `Toolhead:PA1` (not `THR:PA1`), and `extruder_switch_pin` in `mmu_hardware.cfg` plus the `[duplicate_pin_override]` pin must use that **same** name. Copy it from your own printer.cfg — a hardcoded `THR` that doesn't exist fails to load with `MCU 'THR' not found`.
+
 5. **Recommended:** Wrap the `[idle_timeout]` gcode so it does not kill the box heaters during a Happy Hare drying cycle (`MMU_HEATER DRY=1`). Without this, an `idle_timeout` shorter than your drying cycle will turn off the heaters mid-dry. Stock Qidi ships with `timeout: 43200` (12 hours), so this only matters if you've shortened the timeout or want to dry for longer than 12 hours.
 
 ```diff
