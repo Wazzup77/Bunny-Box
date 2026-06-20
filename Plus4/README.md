@@ -113,6 +113,10 @@ sudo service klipper restart
 
 3. **Recommended:** Comment out or delete the entire `[hall_filament_width_sensor]` section. It reads `adc1: PA2` and `adc2: PA3` — the same pins the MMU uses for `extruder_switch_pin`/`extruder_switch_pin2`. Two ADC readers on the same pins can cause `Timer too close` MCU crashes. The MMU already provides filament detection, so the stock hall sensor is redundant.
 
+   > **The installer does this for you** (it comments the section out and copies `adc1`/`adc2` into `extruder_switch_pin`/`extruder_switch_pin2`), so you only need this step if installing by hand.
+   >
+   > **FreeDi / Kalico users, read this:** on those firmwares the toolhead is a *separate MCU*, so the stock sensor reads `Toolhead:PA2` / `Toolhead:PA3`, not a bare `PA2`/`PA3`. A bare pin name binds to the **main** MCU — an unconnected pin that floats and triggers a false "filament runout at extruder" the moment a print starts. Set `extruder_switch_pin`/`extruder_switch_pin2` in `mmu_hardware.cfg` to **exactly** whatever your stock `[hall_filament_width_sensor]`'s `adc1`/`adc2` were (e.g. `Toolhead:PA2` / `Toolhead:PA3`). Note the MCU is named differently per firmware — copy the name from your own printer.cfg.
+
    If you prefer to keep the section (not recommended), modify it as follows (removing or commenting out the red lines, and setting `pause_on_runout` to `False`):
 ```diff
 [hall_filament_width_sensor]

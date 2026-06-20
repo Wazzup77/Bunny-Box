@@ -696,7 +696,7 @@ gcode_macro_cfg_path = os.path.join(config_dir, "gcode_macro.cfg")
 def modify_printer_cfg():
     if not os.path.exists(printer_cfg_path):
         print(f"Warning: {printer_cfg_path} not found.")
-        return
+        return None, None
 
     with open(printer_cfg_path, 'r') as f:
         content = f.read()
@@ -719,18 +719,16 @@ def modify_printer_cfg():
     in_hall_sensor = False
     in_fila_sensor = False
     new_lines = []
+    hall_adc1 = hall_adc2 = None
 
-    # These properties from the stock filament sensors MUST be disabled or they
-    # conflict with MMU operation. Happy Hare handles runout itself, so leaving
-    # pause_on_runout: True on a stock sensor lets it pause prints outside HH's
-    # control (and on the Qidi screen that pause can turn into a full cancel).
-    # The Plus4 has BOTH a [hall_filament_width_sensor] (ADC PA2/PA3) and a
-    # [filament_switch_sensor fila] (microswitch on PC3); both must be neutralised.
+    # The stock [filament_switch_sensor fila] microswitch (on PC3, a different pin
+    # than the MMU uses) is *neutralised* (kept valid but never pausing on its
+    # own): we set pause_on_runout: False and comment its runout gcode. Happy Hare
+    # handles runout itself, so leaving pause_on_runout: True lets the stock sensor
+    # pause prints outside HH's control (on the Qidi screen that can become a
+    # full cancel).
     lines_to_comment = [
-        'min_diameter',
-        'use_current_dia_while_delay',
         'runout_gcode',
-        'RESET_FILAMENT_WIDTH_SENSOR',
         'M118 Filament run out',
         'Filament tangle detected',
         'can_auto_reload',
@@ -744,8 +742,16 @@ def modify_printer_cfg():
     for line in lines:
         stripped = line.strip()
         if stripped.startswith('[hall_filament_width_sensor]'):
+            # The MMU's extruder hall sensor reads the SAME physical ADC pins as
+            # this stock sensor (via extruder_switch_pin/extruder_switch_pin2). Two
+            # ADC readers on one pin cause 'Timer too close' MCU crashes, so we
+            # capture adc1/adc2 below (to copy into mmu_hardware.cfg) and comment
+            # the WHOLE section out — the MMU owns the sensor from here on. The
+            # pin spec (e.g. bare 'PA2' on Qidi stock vs 'Toolhead:PA2' on FreeDi/
+            # Kalico where the toolhead is a separate MCU) is whatever the stock
+            # sensor used, so the MMU ends up bound to the right MCU automatically.
             in_hall_sensor, in_fila_sensor = True, False
-            new_lines.append(line)
+            new_lines.append('# ' + line)
             continue
         elif stripped.startswith('[filament_switch_sensor fila]'):
             in_hall_sensor, in_fila_sensor = False, True
@@ -754,7 +760,15 @@ def modify_printer_cfg():
         elif (in_hall_sensor or in_fila_sensor) and stripped.startswith('['):
             in_hall_sensor = in_fila_sensor = False
 
-        if (in_hall_sensor or in_fila_sensor) and stripped and not stripped.startswith('#'):
+        if in_hall_sensor and stripped and not stripped.startswith('#'):
+            m = re.match(r'(?i)\s*adc1\s*[:=]\s*(\S+)', line)
+            if m:
+                hall_adc1 = m.group(1)
+            m = re.match(r'(?i)\s*adc2\s*[:=]\s*(\S+)', line)
+            if m:
+                hall_adc2 = m.group(1)
+            line = '# ' + line  # comment every line so the ADC pins are freed
+        elif in_fila_sensor and stripped and not stripped.startswith('#'):
             # Explicitly set pause_on_runout to False instead of commenting it out,
             # because Klipper defaults to True when the line is commented out.
             if 'pause_on_runout' in line:
@@ -767,6 +781,52 @@ def modify_printer_cfg():
     with open(printer_cfg_path, 'w') as f:
         f.write('\n'.join(new_lines))
     print("Modified printer.cfg successfully.")
+    if hall_adc1 or hall_adc2:
+        print(f"Detected stock hall sensor ADC pins (adc1={hall_adc1}, adc2={hall_adc2}); "
+              "commented out [hall_filament_width_sensor] so the MMU can own them.")
+    return hall_adc1, hall_adc2
+
+def sync_extruder_hall_pins(adc1, adc2):
+    # Point the MMU's extruder hall sensor at whatever ADC pins the stock
+    # [hall_filament_width_sensor] used. This is the fix for FreeDi/Kalico, where
+    # the toolhead is a separate MCU (e.g. 'Toolhead'), so the repo default of a
+    # bare 'PA2'/'PA3' binds to the *main* MCU — an unconnected pin that floats
+    # and reports a false runout. On Qidi stock firmware adc1/adc2 are bare pins
+    # and this is a no-op-equivalent rewrite.
+    hw_path = os.path.join(config_dir, "mmu", "base", "mmu_hardware.cfg")
+    if not os.path.exists(hw_path):
+        print(f"Note: {hw_path} not found; skipping extruder hall pin sync.")
+        return
+    if not adc1 and not adc2:
+        print("Note: no active [hall_filament_width_sensor] adc1/adc2 found in printer.cfg;")
+        print("      leaving mmu_hardware.cfg extruder_switch_pin unchanged. If your toolhead")
+        print("      is a separate MCU (FreeDi/Kalico), set extruder_switch_pin/")
+        print("      extruder_switch_pin2 manually (e.g. Toolhead:PA2 / Toolhead:PA3).")
+        return
+
+    # mmu_hardware.cfg contains UTF-8 box-art comments; pin encoding explicitly
+    # so the read/write doesn't blow up under a non-UTF-8 locale.
+    with open(hw_path, 'r', encoding='utf-8') as f:
+        hw = f.read()
+
+    changed = []
+    if adc1:
+        hw, n = re.subn(r'(?m)^(\s*extruder_switch_pin\s*:\s*)\S+',
+                        lambda m: m.group(1) + adc1, hw)
+        if n:
+            changed.append(f"extruder_switch_pin -> {adc1}")
+    if adc2:
+        hw, n = re.subn(r'(?m)^(\s*extruder_switch_pin2\s*:\s*)\S+',
+                        lambda m: m.group(1) + adc2, hw)
+        if n:
+            changed.append(f"extruder_switch_pin2 -> {adc2}")
+
+    with open(hw_path, 'w', encoding='utf-8') as f:
+        f.write(hw)
+    if changed:
+        print("Synced MMU extruder hall pins from stock sensor: " + ", ".join(changed))
+    else:
+        print("Note: extruder_switch_pin line(s) not found in mmu_hardware.cfg; no change.")
 
 def modify_gcode_macro_cfg():
     if not os.path.exists(gcode_macro_cfg_path):
@@ -976,7 +1036,8 @@ def modify_idle_timeout():
     print("Wrapped [idle_timeout] gcode with drying state exclusion.")
 
 try:
-    modify_printer_cfg()
+    hall_adc1, hall_adc2 = modify_printer_cfg()
+    sync_extruder_hall_pins(hall_adc1, hall_adc2)
     modify_gcode_macro_cfg()
     modify_idle_timeout()
 except Exception as e:
@@ -1105,17 +1166,18 @@ echo "Please remember to update slicer machine gcodes as specified in the README
 echo "If Happy Hare installation had any issues, check its output above."
 echo ""
 echo "---------------------------------------------------------"
-echo "  RECOMMENDED: Remove [hall_filament_width_sensor]       "
+echo "  [hall_filament_width_sensor] handled automatically      "
 echo "---------------------------------------------------------"
-echo "The stock [hall_filament_width_sensor] in printer.cfg reads adc1: PA2"
-echo "and adc2: PA3 - the same pins the MMU uses for extruder_switch_pin"
-echo "and extruder_switch_pin2. Two ADC readers on the same pins can"
-echo "cause 'Timer too close' MCU crashes under load."
+echo "The stock [hall_filament_width_sensor] reads the same ADC pins the MMU"
+echo "uses for extruder_switch_pin/extruder_switch_pin2. Two ADC readers on one"
+echo "pin cause 'Timer too close' MCU crashes, so the installer commented the"
+echo "whole section out and copied its adc1/adc2 pins into mmu_hardware.cfg."
 echo ""
-echo "The MMU already provides filament detection, so the stock hall"
-echo "sensor is redundant. It is STRONGLY recommended to comment out or"
-echo "delete the entire [hall_filament_width_sensor] section from your"
-echo "printer.cfg after verifying the MMU is working."
+echo "This also fixes FreeDi/Kalico installs where the toolhead is a separate"
+echo "MCU (e.g. 'Toolhead:PA2'): the MMU now reads the real sensor instead of a"
+echo "bare 'PA2' on the main board, which floats and triggers a false runout."
+echo "Check the 'Synced MMU extruder hall pins' line in the output above; if it"
+echo "did NOT appear, set extruder_switch_pin/extruder_switch_pin2 manually."
 echo ""
 echo "#########################################################"
 echo "##                                                     ##"
