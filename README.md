@@ -9,6 +9,9 @@ Qidi Box open source makeover using Happy Hare
 
 Bunny Box is the Qidi Box mod that allows you to ditch Qidi's closed-source, proprietary firmware and use [Happy Hare](https://github.com/moggieuk/Happy-Hare/) to control your Box. With added support for Qidi-specific qirks such as the extruder hall sensor and above-extruder cutter placement, this allows Qidi Box use with Freedi and Kalico as well as using non-Qidi multimaterial units with Qidi printers. Strong defaults are provided, but the beauty of Happy Hare is that almost anything can be tweaked!
 
+> [!IMPORTANT]
+> **Always install and update via the Bunny Box installer for your printer** — [Plus4](Plus4/install-bb-p4.sh), [Q2](Q2/install-bb-q2.sh), or [Max4](Max4/install-bb-max4.sh) — **not Happy Hare's `install.sh` on its own.** The Bunny Box installer runs Happy Hare's installer for you, but it also performs the Qidi-specific steps Happy Hare knows nothing about: disabling `box.cfg`, freeing the extruder hall-sensor pins, neutralising the stock runout sensor, patching `klippy.py`, seeding `mmu__revision` into the correct `save_variables` file, and preserving your calibration on updates. Running `Happy-Hare/install.sh` directly skips all of that and will leave your Box misconfigured. The same applies to updates — re-run the Bunny Box installer, never Happy Hare's.
+
 ## FEATURES
 
  * Open source alternative to Qidi's Box control
@@ -81,7 +84,7 @@ If no `backup_hh_*` directory exists (e.g. the install was done manually), resto
 
 Just re-run the installer for your printer. When it detects an existing install and you choose **1) Reinstall / update**, your config is no longer overwritten wholesale. The update is split between two installers that own different parts of the config:
 
-**Happy Hare's own installer** handles everything it manages: the MMU *logic* files (`mmu_cut_tip.cfg`, `mmu_sequence.cfg`, `mmu_software.cfg`, …, which it installs as symlinks into `~/Happy-Hare`), and your *parameters* (`mmu_parameters.cfg`, `mmu_macro_vars.cfg`, addon configs), whose values it carries forward as it upgrades them. **Your calibration (`mmu/mmu_vars.cfg`) is left untouched.** This is why the bundled copies of those files in this repo can look "behind" — they're only reference snapshots; the live versions come from the Happy Hare fork at install time.
+**Happy Hare's own installer** handles everything it manages: the MMU *logic* files (`mmu_cut_tip.cfg`, `mmu_sequence.cfg`, `mmu_software.cfg`, …, which it installs as symlinks into `~/Happy-Hare`), and your *parameters* (`mmu_parameters.cfg`, `mmu_macro_vars.cfg`, addon configs), whose values it carries forward as it upgrades them. **Your calibration (`mmu/mmu_vars.cfg`) is left untouched.** This is why the bundled copies of those files in this repo can look "behind" — they're only reference snapshots; the live versions come from the Happy Hare fork at install time. As a safety net, the Bunny Box installer no longer just *trusts* this: right after Happy Hare runs it checks `mmu/mmu_vars.cfg`, and if anything reset it to the blank `mmu__revision = 0` template it restores your real calibration from the backup automatically (and tells you it did). So your gear/encoder/gate calibration survives an update even if something upstream tries to overwrite it.
 
 **Bunny Box's smart merge** handles only the files Happy Hare leaves frozen and that Bunny Box truly owns: `mmu_hardware.cfg` (Qidi pins), `mmu.cfg`, the addon `*_hw.cfg` hardware files, and the top-level `bunnybox_macros.cfg`. For these it does a **3-way merge** against a snapshot of what it last installed (`printer_data/config/.bunnybox_base`, recorded by a `.bunnybox_manifest`):
 

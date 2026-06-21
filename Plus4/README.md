@@ -20,6 +20,37 @@ Don't forget to update the machine gcodes in the slicer to use the ones provided
 > [!CAUTION]
 > **The installer does NOT calibrate your MMU.** After installation you MUST calibrate before your first print — see [CALIBRATION — REQUIRED BEFORE FIRST USE](#-calibration--required-before-first-use) at the bottom of this guide. This is the most commonly missed step.
 
+### Non-interactive (scripted) installation
+
+Every prompt can be preset with a flag, so the installer can run unattended (e.g. from another script). Anything left unset is still asked for interactively; `-y`/`--yes` takes the recommended default for everything unset. Run with `--help` for the full list.
+
+```bash
+# Fully unattended update on an existing install, accepting all recommended defaults:
+./install-bb-p4.sh --yes
+
+# Fresh install pinning every choice explicitly:
+./install-bb-p4.sh --serial=auto --drying-exclusion=yes --aht10=yes \
+                    --save-variables=root --default-calibration=no
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `-y`, `--yes` | Take the recommended default for every unset prompt (non-interactive). Happy Hare's own installer may still prompt. |
+| `--action=update\|revert\|cancel` | What to do when an existing install is detected. `--revert` is kept as an alias. |
+| `--serial=PATH\|auto` | Use this `/dev/serial/by-id` path, or `auto` to accept the autodetected Qidi Box. |
+| `--drying-exclusion=yes\|no` | Apply the `idle_timeout` drying-state exclusion (issue #29). |
+| `--aht10=yes\|no` | Install the custom AHT10 environment sensor module. |
+| `--save-variables=root\|mmu` | Which `[save_variables]` file to keep if two are found (see below). Default: `root`. |
+| `--default-calibration=yes\|no` | Seed Bunny Box's vetted stock-Plus4 calibration (you should still calibrate). |
+
+### How the installer handles `save_variables`
+
+Klipper allows only **one** active `[save_variables]` section, but stock Qidi firmware declares one (`saved_variables.cfg`) and Happy Hare declares another (`mmu/mmu_vars.cfg`). The installer detects this and, if two different files are declared, keeps a single one — merging the other's variables in first so no calibration is lost, then commenting the redundant section out. If you're prompted, the **config-root `saved_variables.cfg` is the default**; override with `--save-variables=mmu`. On FreeDi/Kalico/mainline (no stock section) there's nothing to reconcile and `mmu/mmu_vars.cfg` is left as the single store.
+
+### Optional: seed default calibration
+
+The installer can seed a vetted set of starting calibration values for **stock Plus4 + stock Qidi Box** hardware (`--default-calibration=yes`, or answer the optional prompt). It only fills in values you don't already have and **never overwrites** your own calibration. This is a head-start, **not** a replacement for calibrating your machine — you should still run `MMU_CALIBRATE_GEAR` and `MMU_CALIBRATE_ENCODER`. The step only appears once a vetted defaults file ([`config_hh-standalone/mmu_vars.defaults.cfg`](./config_hh-standalone/mmu_vars.defaults.cfg)) has real values filled in.
+
 ## REVERTING TO STOCK
 
 The installer script doubles as the uninstaller. Re-run it on a printer where bunnybox / Happy Hare is already installed and it will offer a revert option:
@@ -49,6 +80,9 @@ wget -qO - https://raw.githubusercontent.com/Wazzup77/Bunny-Box/refs/heads/main/
 Use `--help` to see all flags. The revert leaves the cloned `~/Happy-Hare/` repo and the custom `aht10.py` module on disk; they are harmless once `printer.cfg` no longer references them.
 
 ## MANUAL INSTALLATION
+
+> [!WARNING]
+> The automated installer above is the **supported** way to install and update — use it unless you have a specific reason not to. The steps below are documented for reference and for advanced users who want to understand what the installer does; they reproduce its work by hand. In particular, do **not** treat "run `Happy-Hare/install.sh`" as a standalone install: on its own it skips every Qidi-specific step (disabling `box.cfg`, the hall-sensor pins, the stock runout sensor, the `klippy.py` patch, the `save_variables` handling, and calibration preservation on updates).
 
 ### HAPPY HARE INSTALLATION
 <details>
