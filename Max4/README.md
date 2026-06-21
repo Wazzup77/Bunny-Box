@@ -136,6 +136,11 @@ event_delay: 3.0          # event delay time
 pause_delay: 0.5          # pause delay time
 switch_pin:!THR:PA0       # Detect switch pin
 ```
+
+> **The installer does the `[duplicate_pin_override]` + pin sync for you** — it reads the stock sensor's `switch_pin` and writes it into both the override and `mmu_hardware.cfg`'s `extruder_switch_pin`. You only need this step if installing by hand.
+>
+> **FreeDi / Kalico users:** those firmwares may name the toolhead MCU something other than `THR` (e.g. `Toolhead`). If so, the stock `switch_pin` will read `Toolhead:PA0` (not `THR:PA0`), and `extruder_switch_pin` in `mmu_hardware.cfg` plus the `[duplicate_pin_override]` pin must use that **same** name. Copy it from your own printer.cfg — a hardcoded `THR` that doesn't exist fails to load with `MCU 'THR' not found`.
+
 3. Add `[include bunnybox_macros.cfg]` at the top.
 
 4. Make sure Happy Hare files were included during install in printer.cfg: 
