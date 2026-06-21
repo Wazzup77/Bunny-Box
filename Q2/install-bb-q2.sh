@@ -11,34 +11,84 @@ set -e
 # repository or standalone (e.g., via wget or curl).
 # =========================================================================
 
-# Parse command-line arguments. --revert makes the script non-interactive
-# (suitable for use in other scripts) by skipping the menu and running the
-# revert flow directly.
-REVERT_ONLY=0
-for arg in "$@"; do
-    case "$arg" in
-        --revert)
-            REVERT_ONLY=1
-            ;;
-        -h|--help)
-            cat <<EOF
-Usage: $(basename "$0") [--revert] [--help]
+# Parse command-line arguments. With no options the installer is interactive
+# (as before). Options let it be driven from another script: any prompt whose
+# value is supplied by a flag is not asked, and -y/--yes takes the recommended
+# default for every prompt left unset. --revert is kept as an alias for
+# --action=revert so existing callers keep working.
+REVERT_ONLY=0          # back-compat flag for the early non-interactive revert
+ASSUME_YES=0           # -y/--yes: take the recommended default for unset prompts
+OPT_ACTION=""          # existing install: update | revert | cancel
+OPT_SERIAL=""          # /dev/serial/by-id path, or "auto" to accept autodetect
+OPT_DRYING=""          # yes | no  (idle_timeout drying-state exclusion, #29)
+OPT_AHT10=""           # yes | no  (custom AHT10 environment sensor module)
+OPT_SAVEVARS=""        # root | mmu  (which save_variables file to keep)
+OPT_DEFAULT_CALIB=""   # yes | no  (seed vetted stock-Q2 default calibration)
+
+print_help() {
+    cat <<EOF
+Usage: $(basename "$0") [options]
+
+With no options, runs the interactive installer. Flags drive it
+non-interactively (e.g. from another script); any option left unset is asked
+for as before. -y/--yes takes the recommended default for every unset Bunny
+Box prompt. (Happy Hare's own installer may still prompt.)
 
 Options:
-  --revert    Restore the pre-install printer.cfg / gcode_macro.cfg from the
-              oldest backup_hh_* directory and exit. Non-interactive — safe
-              to call from other scripts.
-  -h, --help  Show this help message and exit.
-
-With no arguments, runs the interactive installer.
+  -y, --yes                  Assume the recommended default for all unset
+                             Bunny Box prompts (non-interactive).
+  --action=ACTION            On an existing install: update | revert | cancel.
+  --revert                   Alias for --action=revert (non-interactive revert).
+  --serial=PATH|auto         Use this /dev/serial/by-id path, or 'auto' to
+                             accept the autodetected Qidi Box.
+  --drying-exclusion=yes|no  Apply the idle_timeout drying-state exclusion (#29).
+  --aht10=yes|no             Install the custom AHT10 environment sensor module.
+  --save-variables=root|mmu  If two [save_variables] files are found, keep the
+                             one in the config root (saved_variables.cfg) or the
+                             one in mmu/ (mmu_vars.cfg). Default: root.
+  --default-calibration=yes|no
+                             Seed Bunny Box's vetted stock-Q2 calibration
+                             into save_variables (you should STILL calibrate).
+  -h, --help                 Show this help message and exit.
 EOF
-            exit 0
-            ;;
-        *)
-            echo "Unknown argument: $arg" >&2
-            echo "Use --help for usage." >&2
-            exit 1
-            ;;
+}
+
+bad_opt() { echo "$1" >&2; echo "Use --help for usage." >&2; exit 1; }
+
+# Normalise a yes/no option value; echoes "yes", "no", or "INVALID".
+norm_yesno() {
+    case "$1" in
+        y|Y|yes|YES|Yes) echo "yes" ;;
+        n|N|no|NO|No)    echo "no" ;;
+        *)               echo "INVALID" ;;
+    esac
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes)   ASSUME_YES=1 ;;
+        --revert)   OPT_ACTION="revert"; REVERT_ONLY=1 ;;
+        --action=*) OPT_ACTION="${arg#*=}"
+            case "$OPT_ACTION" in
+                update|revert|cancel) ;;
+                *) bad_opt "Invalid --action: '$OPT_ACTION' (expected update, revert or cancel)" ;;
+            esac
+            if [ "$OPT_ACTION" = "revert" ]; then REVERT_ONLY=1; fi ;;
+        --serial=*) OPT_SERIAL="${arg#*=}"
+            if [ -z "$OPT_SERIAL" ]; then bad_opt "Empty value for --serial"; fi ;;
+        --drying-exclusion=*) OPT_DRYING="$(norm_yesno "${arg#*=}")"
+            if [ "$OPT_DRYING" = "INVALID" ]; then bad_opt "Invalid --drying-exclusion (expected yes or no)"; fi ;;
+        --aht10=*) OPT_AHT10="$(norm_yesno "${arg#*=}")"
+            if [ "$OPT_AHT10" = "INVALID" ]; then bad_opt "Invalid --aht10 (expected yes or no)"; fi ;;
+        --save-variables=*) OPT_SAVEVARS="${arg#*=}"
+            case "$OPT_SAVEVARS" in
+                root|mmu) ;;
+                *) bad_opt "Invalid --save-variables: '$OPT_SAVEVARS' (expected root or mmu)" ;;
+            esac ;;
+        --default-calibration=*) OPT_DEFAULT_CALIB="$(norm_yesno "${arg#*=}")"
+            if [ "$OPT_DEFAULT_CALIB" = "INVALID" ]; then bad_opt "Invalid --default-calibration (expected yes or no)"; fi ;;
+        -h|--help)  print_help; exit 0 ;;
+        *)          bad_opt "Unknown argument: $arg" ;;
     esac
 done
 
@@ -143,8 +193,9 @@ is_bb_installed() {
 # alone, so without us new Bunny Box hardware/macro defaults would never reach
 # an existing install. We snapshot just these as the merge "base" in
 # $CONFIG_DIR/.bunnybox_base, so base/yours/new share one lineage and merge
-# cleanly. mmu_vars.cfg is left untouched (HH preserves it). Everything else is
-# delegated to HH's installer.
+# cleanly. mmu_vars.cfg (your calibration/state) is preserved explicitly after
+# the HH install step (see the "Guarantee your calibration" guard there) rather
+# than trusted to HH alone. Everything else is delegated to HH's installer.
 
 # Marker/manifest locations inside the Klipper config directory. Dot-prefixed
 # so Klipper's [include ...] globs never pick them up.
@@ -488,14 +539,29 @@ echo ""
 if is_bb_installed; then
     BB_UPDATE=1
     echo "Existing Happy Hare / bunnybox install detected."
-    echo "  1) Reinstall / update (re-apply configuration)"
-    echo "  2) Revert to stock (restore pre-install printer.cfg and gcode_macro.cfg)"
-    echo "  3) Cancel"
-    read -p "Select [1/2/3, default 1]: " BB_ACTION </dev/tty
-    case "$BB_ACTION" in
-        2) revert_to_stock ;;
-        3) echo "Cancelled."; exit 0 ;;
-        *) echo "Proceeding with reinstall." ;;
+    # Decide the action: explicit --action wins, then --yes (update), else menu.
+    # (--action=revert is already handled by the early REVERT_ONLY path above.)
+    if [ -n "$OPT_ACTION" ]; then
+        BB_ACTION_CHOICE="$OPT_ACTION"
+        echo "Action: $BB_ACTION_CHOICE (from --action)."
+    elif [ "$ASSUME_YES" -eq 1 ]; then
+        BB_ACTION_CHOICE="update"
+        echo "Action: update (--yes default)."
+    else
+        echo "  1) Reinstall / update (re-apply configuration)"
+        echo "  2) Revert to stock (restore pre-install printer.cfg and gcode_macro.cfg)"
+        echo "  3) Cancel"
+        read -p "Select [1/2/3, default 1]: " BB_ACTION </dev/tty
+        case "$BB_ACTION" in
+            2) BB_ACTION_CHOICE="revert" ;;
+            3) BB_ACTION_CHOICE="cancel" ;;
+            *) BB_ACTION_CHOICE="update" ;;
+        esac
+    fi
+    case "$BB_ACTION_CHOICE" in
+        revert) revert_to_stock ;;
+        cancel) echo "Cancelled."; exit 0 ;;
+        *)      echo "Proceeding with reinstall." ;;
     esac
 else
     echo "This script will automate the installation of Happy Hare"
@@ -506,10 +572,14 @@ else
     echo "After install you cannot load/unload until calibration, and gear"
     echo "calibration needs the filament cut flush at the gate (not loaded)."
     echo ""
-    read -p "Do you want to continue? (y/n) " -n 1 -r </dev/tty
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    if [ "$ASSUME_YES" -eq 1 ]; then
+        echo "Proceeding with installation (--yes)."
+    else
+        read -p "Do you want to continue? (y/n) " -n 1 -r </dev/tty
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
     fi
 fi
 
@@ -564,15 +634,38 @@ if [ -d "/dev/serial/by-id" ]; then
     DETECTED_SERIAL=$(find /dev/serial/by-id -maxdepth 1 -iname "*QIDI_BOX*" 2>/dev/null | head -n 1)
 fi
 
-if [ -n "$DETECTED_SERIAL" ]; then
-    echo "Autodetected Qidi Box at: $DETECTED_SERIAL"
-    read -p "Use this serial port? (Y/n) " USE_DETECTED </dev/tty
-    if [[ -z "$USE_DETECTED" ]] || [[ "$USE_DETECTED" =~ ^[Yy]$ ]]; then
-        SERIAL_ID="$DETECTED_SERIAL"
+# Explicit --serial wins. "auto" means accept the autodetected device.
+if [ -n "$OPT_SERIAL" ]; then
+    if [ "$OPT_SERIAL" = "auto" ]; then
+        if [ -n "$DETECTED_SERIAL" ]; then
+            SERIAL_ID="$DETECTED_SERIAL"
+            echo "Using autodetected serial (--serial=auto): $SERIAL_ID"
+        else
+            echo "Warning: --serial=auto but no Qidi Box was autodetected."
+        fi
+    else
+        SERIAL_ID="$OPT_SERIAL"
+        echo "Using serial from --serial: $SERIAL_ID"
     fi
 fi
 
-if [ -z "$SERIAL_ID" ]; then
+if [ -z "$SERIAL_ID" ] && [ -n "$DETECTED_SERIAL" ]; then
+    if [ "$ASSUME_YES" -eq 1 ]; then
+        SERIAL_ID="$DETECTED_SERIAL"
+        echo "Using autodetected serial (--yes): $SERIAL_ID"
+    else
+        echo "Autodetected Qidi Box at: $DETECTED_SERIAL"
+        read -p "Use this serial port? (Y/n) " USE_DETECTED </dev/tty
+        if [[ -z "$USE_DETECTED" ]] || [[ "$USE_DETECTED" =~ ^[Yy]$ ]]; then
+            SERIAL_ID="$DETECTED_SERIAL"
+        fi
+    fi
+fi
+
+if [ -z "$SERIAL_ID" ] && [ "$ASSUME_YES" -eq 1 ]; then
+    echo "Warning: could not determine the serial port non-interactively."
+    echo "         Pass --serial=PATH (or --serial=auto with the Box connected)."
+elif [ -z "$SERIAL_ID" ]; then
     SERIAL_DEVICES=()
     while IFS= read -r dev; do
         SERIAL_DEVICES+=("$dev")
@@ -641,18 +734,319 @@ else
     echo "Error: install.sh not found in Happy-Hare repo!"
 fi
 
+# ---------------------------------------------------------------------------
+# Guarantee your calibration/state survives the update.
+#
+# mmu/mmu_vars.cfg is Happy Hare's live [save_variables] store: gear/encoder/
+# gate calibration, the gate map, persisted state. It is runtime STATE, not
+# config we ship — the repo carries only a bare 'mmu__revision = 0' template.
+# Both our fresh-install 'cp -r mmu' and Happy Hare's own installer are meant
+# to leave an existing one alone, but Bunny Box no longer RELIES on that:
+# silently resetting calibration (forcing a full recalibrate) is too costly to
+# leave to chance. We took a full backup of the live mmu/ tree above; if the
+# file is now missing or was reset to our shipped template, restore your copy.
+MMU_VARS_REL="mmu/mmu_vars.cfg"
+SAVED_MMU_VARS="$BACKUP_DIR/mmu/mmu_vars.cfg"
+LIVE_MMU_VARS="$CONFIG_DIR/$MMU_VARS_REL"
+TEMPLATE_MMU_VARS="$SCRIPT_DIR/$CONFIG_VARIANT/$MMU_VARS_REL"
+# Only act when the backup holds a REAL (non-template) file you could lose, and
+# the live file is now gone or reset to the template. A genuinely calibrated
+# live file (HH/smart-merge preserved it correctly) is left exactly as-is.
+if [ -f "$SAVED_MMU_VARS" ] && ! cmp -s "$SAVED_MMU_VARS" "$TEMPLATE_MMU_VARS"; then
+    if [ ! -f "$LIVE_MMU_VARS" ] || cmp -s "$LIVE_MMU_VARS" "$TEMPLATE_MMU_VARS"; then
+        mkdir -p "$(dirname "$LIVE_MMU_VARS")"
+        cp "$SAVED_MMU_VARS" "$LIVE_MMU_VARS"
+        echo ""
+        echo "==> Preserved your existing mmu_vars.cfg (calibration/state)."
+        echo "    The update would have reset it to the blank template; your"
+        echo "    version was restored from the backup in $BACKUP_DIR."
+    fi
+fi
+
 echo ""
-echo "==> Setting mmu__revision = 0 in saved_variables.cfg"
-# Required by Happy Hare: It looks for 'mmu__revision' in the saved_variables.cfg.
-SV_CFG="$CONFIG_DIR/saved_variables.cfg"
+echo "==> Reconciling save_variables (Klipper allows only one)..."
+# Klipper permits exactly ONE active [save_variables] section. Stock Qidi
+# firmware declares one in printer.cfg (-> saved_variables.cfg) and Happy Hare
+# declares one in mmu/base/mmu_macro_vars.cfg (-> mmu/mmu_vars.cfg). With both
+# present they only "work" because Klipper merges duplicate sections last-wins,
+# so which file actually holds your calibration depends on include order and
+# firmware (stock Qidi keeps saved_variables.cfg; FreeDi/Kalico/mainline, which
+# have no stock section, end up on mmu/mmu_vars.cfg). We make it deterministic:
+# detect the active declarations and, if more than one file is targeted, keep a
+# single one (merging the others' variables in so nothing is lost) and comment
+# the rest out. Default is the config-root file (saved_variables.cfg).
+RECONCILE_PY=$(mktemp)
+cat > "$RECONCILE_PY" <<'PYEOF'
+import os, re, sys
+CONFIG_DIR = os.environ.get("CONFIG_DIR", os.path.expanduser("~/printer_data/config"))
+SECT_RE = re.compile(r'^\s*\[\s*save_variables\s*\]\s*$', re.IGNORECASE)
+ANY_SECT_RE = re.compile(r'^\s*\[[^\]]+\]\s*')
+FILENAME_RE = re.compile(r'^\s*filename\s*[:=]\s*(.+?)\s*$', re.IGNORECASE)
+VAR_RE = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$')
+
+def abspath_of(raw):
+    p = os.path.expanduser(os.path.expandvars(raw.strip()))
+    if not os.path.isabs(p):
+        p = os.path.join(CONFIG_DIR, p)
+    return os.path.normpath(p)
+
+def scan_files():
+    seen, files = set(), []
+    def add(p):
+        if os.path.isfile(p) and p not in seen:
+            seen.add(p); files.append(p)
+    add(os.path.join(CONFIG_DIR, "printer.cfg"))
+    try:
+        for n in sorted(os.listdir(CONFIG_DIR)):
+            if n.endswith(".cfg"):
+                add(os.path.join(CONFIG_DIR, n))
+    except OSError:
+        pass
+    for root, _, names in os.walk(os.path.join(CONFIG_DIR, "mmu")):
+        for n in sorted(names):
+            if n.endswith(".cfg"):
+                add(os.path.join(root, n))
+    return files
+
+def find_sections():
+    out = []
+    for f in scan_files():
+        try:
+            with open(f, "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.read().split("\n")
+        except OSError:
+            continue
+        i = 0
+        while i < len(lines):
+            if SECT_RE.match(lines[i]):
+                target, j = None, i + 1
+                while j < len(lines):
+                    if ANY_SECT_RE.match(lines[j]):
+                        break
+                    m = FILENAME_RE.match(lines[j])
+                    if m and not lines[j].lstrip().startswith("#"):
+                        target = abspath_of(m.group(1)); break
+                    j += 1
+                if target:
+                    out.append({"file": f, "line": i, "target": target})
+            i += 1
+    return out
+
+def tag_for(target):
+    d = os.path.normpath(os.path.dirname(target))
+    if d == os.path.normpath(CONFIG_DIR):
+        return "root"
+    if d.startswith(os.path.normpath(os.path.join(CONFIG_DIR, "mmu"))):
+        return "mmu"
+    return "other"
+
+def comment_section(path, header_line):
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        lines = fh.read().split("\n")
+    if header_line >= len(lines) or not SECT_RE.match(lines[header_line]):
+        return
+    lines[header_line] = "# " + lines[header_line] + "   # disabled by Bunny Box (single save_variables)"
+    j = header_line + 1
+    while j < len(lines):
+        ln = lines[j]
+        if ANY_SECT_RE.match(ln) or ln.strip() == "":
+            break
+        if not ln.lstrip().startswith("#"):
+            lines[j] = "# " + ln
+        j += 1
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+
+def read_vars(path):
+    pairs = []
+    if os.path.isfile(path):
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for ln in fh.read().split("\n"):
+                if ln.lstrip().startswith("#"):
+                    continue
+                m = VAR_RE.match(ln)
+                if m:
+                    pairs.append((m.group(1), m.group(2)))
+    return pairs
+
+def write_vars(path, pairs):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("[Variables]\n" + "".join(f"{k} = {v}\n" for k, v in pairs))
+
+def do_detect():
+    distinct = {}
+    for s in find_sections():
+        distinct.setdefault(s["target"], tag_for(s["target"]))
+    order = {"root": 0, "mmu": 1, "other": 2}
+    for t in sorted(distinct, key=lambda x: (order[distinct[x]], x)):
+        print(f"{distinct[t]}\t{t}")
+
+def do_apply(chosen):
+    chosen = os.path.normpath(chosen)
+    sections = find_sections()
+    merged = list(read_vars(chosen))
+    have = {k for k, _ in merged}
+    for t in {s["target"] for s in sections}:
+        if os.path.normpath(t) == chosen:
+            continue
+        for k, v in read_vars(t):
+            if k not in have:
+                merged.append((k, v)); have.add(k)
+    if "mmu__revision" not in have:
+        merged.append(("mmu__revision", "0"))
+    write_vars(chosen, merged)
+    for s in sections:
+        if os.path.normpath(s["target"]) != chosen:
+            comment_section(s["file"], s["line"])
+    print(f"Reconciled save_variables -> {chosen}")
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "detect"
+if mode == "detect":
+    do_detect()
+elif mode == "apply":
+    do_apply(sys.argv[2])
+PYEOF
+
+SV_LINES=()
+while IFS= read -r l; do [ -n "$l" ] && SV_LINES+=("$l"); done \
+    < <(CONFIG_DIR="$CONFIG_DIR" python3 "$RECONCILE_PY" detect 2>/dev/null || true)
+
+ACTIVE_SAVEVARS=""
+if [ "${#SV_LINES[@]}" -le 1 ]; then
+    if [ "${#SV_LINES[@]}" -eq 1 ]; then
+        ACTIVE_SAVEVARS="${SV_LINES[0]#*$'\t'}"
+        echo "Single save_variables store, nothing to reconcile: $ACTIVE_SAVEVARS"
+    else
+        ACTIVE_SAVEVARS="$CONFIG_DIR/saved_variables.cfg"
+        echo "No save_variables declaration detected; using $ACTIVE_SAVEVARS"
+    fi
+else
+    echo "Multiple save_variables files are declared — Klipper can use only one:"
+    SV_TAGS=(); SV_PATHS=()
+    for l in "${SV_LINES[@]}"; do
+        SV_TAGS+=("${l%%$'\t'*}"); SV_PATHS+=("${l#*$'\t'}")
+    done
+    # Default = first target NOT under mmu/ (i.e. the config-root file).
+    DEFAULT_IDX=0
+    for i in "${!SV_TAGS[@]}"; do
+        if [ "${SV_TAGS[$i]}" != "mmu" ]; then DEFAULT_IDX="$i"; break; fi
+    done
+    CHOSEN=""
+    if [ "$OPT_SAVEVARS" = "root" ]; then
+        for i in "${!SV_TAGS[@]}"; do [ "${SV_TAGS[$i]}" != "mmu" ] && { CHOSEN="${SV_PATHS[$i]}"; break; }; done
+        [ -n "$CHOSEN" ] || CHOSEN="${SV_PATHS[$DEFAULT_IDX]}"
+    elif [ "$OPT_SAVEVARS" = "mmu" ]; then
+        for i in "${!SV_TAGS[@]}"; do [ "${SV_TAGS[$i]}" = "mmu" ] && { CHOSEN="${SV_PATHS[$i]}"; break; }; done
+        [ -n "$CHOSEN" ] || CHOSEN="${SV_PATHS[$DEFAULT_IDX]}"
+    elif [ "$ASSUME_YES" -eq 1 ]; then
+        CHOSEN="${SV_PATHS[$DEFAULT_IDX]}"
+        echo "Choosing $CHOSEN (--yes default: config root)."
+    else
+        for i in "${!SV_PATHS[@]}"; do
+            sfx=""; [ "$i" -eq "$DEFAULT_IDX" ] && sfx="   <- default (recommended)"
+            printf "  %d) %s%s\n" "$((i+1))" "${SV_PATHS[$i]}" "$sfx"
+        done
+        read -p "Which file should Happy Hare use? [1-${#SV_PATHS[@]}, default $((DEFAULT_IDX+1))]: " SV_SEL </dev/tty
+        if [[ "$SV_SEL" =~ ^[0-9]+$ ]] && [ "$SV_SEL" -ge 1 ] && [ "$SV_SEL" -le "${#SV_PATHS[@]}" ]; then
+            CHOSEN="${SV_PATHS[$((SV_SEL-1))]}"
+        else
+            CHOSEN="${SV_PATHS[$DEFAULT_IDX]}"
+        fi
+    fi
+    echo "Keeping save_variables -> $CHOSEN"
+    echo "(the other store's variables are merged in first, then it is commented out)"
+    CONFIG_DIR="$CONFIG_DIR" python3 "$RECONCILE_PY" apply "$CHOSEN" \
+        || echo "Warning: save_variables reconciliation failed; check your config by hand."
+    ACTIVE_SAVEVARS="$CHOSEN"
+fi
+rm -f "$RECONCILE_PY"
+
+echo ""
+echo "==> Ensuring mmu__revision exists in $(basename "$ACTIVE_SAVEVARS")"
+# Happy Hare validates setup by reading 'mmu__revision' from the active
+# save_variables file (resolved above). Seed it ONLY if absent: a fresh store
+# needs the marker, but an existing install already carries the correct revision
+# (e.g. 141) and forcing it back to 0 would make Happy Hare re-run its variable
+# migrations on the next boot. So we never clobber an existing value.
+SV_CFG="$ACTIVE_SAVEVARS"
+mkdir -p "$(dirname "$SV_CFG")"
 if [ ! -f "$SV_CFG" ]; then
     echo "[Variables]" > "$SV_CFG"
 fi
-# safely remove existing variable and append it again
-tmp_sv=$(mktemp)
-sed '/^mmu__revision[[:space:]]*=/d' "$SV_CFG" > "$tmp_sv"
-echo "mmu__revision = 0" >> "$tmp_sv"
-mv "$tmp_sv" "$SV_CFG"
+if grep -qE '^[[:space:]]*mmu__revision[[:space:]]*=' "$SV_CFG"; then
+    echo "Kept existing mmu__revision (not reset)."
+else
+    echo "mmu__revision = 0" >> "$SV_CFG"
+    echo "Seeded mmu__revision = 0 (fresh store)."
+fi
+
+# =========================================================================
+# Optional: seed Bunny Box's vetted default calibration
+# =========================================================================
+# A starting set of calibration values for STOCK Q2 + stock Qidi Box
+# hardware, shipped in the variant as mmu/mmu_vars.defaults.cfg. This gets a
+# stock machine moving sooner, but is NOT a substitute for calibrating your own
+# unit — encoder/gear behaviour varies per machine. OPT-IN and never destructive:
+# only values MISSING from your active save_variables are added, so it can't
+# clobber calibration you already have. The step is offered only when a defaults
+# file with real values is present, so it stays inert until one is committed.
+DEFAULTS_CALIB="$SCRIPT_DIR/$CONFIG_VARIANT/mmu_vars.defaults.cfg"
+# True only if the defaults file declares at least one variable besides mmu__revision.
+calib_has_values() {
+    [ -f "$1" ] || return 1
+    grep -viE '^[[:space:]]*(#|\[|mmu__revision[[:space:]]*=)' "$1" \
+        | grep -qE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*='
+}
+if calib_has_values "$DEFAULTS_CALIB"; then
+    echo ""
+    echo "==> Optional: seed vetted default calibration (stock Q2 + stock Box)"
+    echo "    This gets you moving sooner but is NOT a substitute for calibrating"
+    echo "    your own machine. You should still run MMU_CALIBRATE_GEAR and"
+    echo "    MMU_CALIBRATE_ENCODER. Existing values are never overwritten."
+    DO_CALIB="no"
+    if [ -n "$OPT_DEFAULT_CALIB" ]; then
+        DO_CALIB="$OPT_DEFAULT_CALIB"
+        echo "    default-calibration: $OPT_DEFAULT_CALIB (from --default-calibration)."
+    elif [ "$ASSUME_YES" -eq 1 ]; then
+        DO_CALIB="no"
+        echo "    Skipping (pass --default-calibration=yes to seed it)."
+    else
+        read -p "    Seed default calibration now? (y/N) " CALIB_ANS </dev/tty
+        [[ "$CALIB_ANS" =~ ^[Yy]$ ]] && DO_CALIB="yes"
+    fi
+    if [ "$DO_CALIB" = "yes" ]; then
+        DEFAULTS_SRC="$DEFAULTS_CALIB" TARGET_SV="$ACTIVE_SAVEVARS" python3 - <<'PYEOF'
+import os, re
+src = os.environ["DEFAULTS_SRC"]; dst = os.environ["TARGET_SV"]
+VAR = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$')
+def read(p):
+    out = []
+    if os.path.isfile(p):
+        with open(p, encoding="utf-8", errors="replace") as fh:
+            for ln in fh:
+                if ln.lstrip().startswith("#"):
+                    continue
+                m = VAR.match(ln)
+                if m:
+                    out.append((m.group(1), m.group(2)))
+    return out
+defaults = read(src); cur = read(dst); have = {k for k, _ in cur}
+added = []
+for k, v in defaults:
+    if k == "mmu__revision" or k in have:
+        continue
+    cur.append((k, v)); have.add(k); added.append(k)
+os.makedirs(os.path.dirname(dst), exist_ok=True)
+with open(dst, "w", encoding="utf-8") as fh:
+    fh.write("[Variables]\n" + "".join(f"{k} = {v}\n" for k, v in cur))
+print(f"Seeded {len(added)} default calibration value(s)"
+      + (": " + ", ".join(added) if added else " (all already present)."))
+PYEOF
+    else
+        echo "    Skipped default calibration."
+    fi
+fi
 
 echo ""
 echo "==> Modifying printer.cfg and gcode_macro.cfg..."
@@ -673,8 +1067,14 @@ if [ -f "$CONFIG_DIR/printer.cfg" ] && grep -qE '^\[[[:space:]]*idle_timeout[[:s
     echo "drying is active, only extruder/heater_bed/chamber are zeroed and"
     echo "the box heaters keep running. When not drying, the original gcode"
     echo "runs unchanged."
-    read -p "Apply this modification? (Recommended) (Y/n) " DRYING_ANSWER </dev/tty
-    if [[ -z "$DRYING_ANSWER" ]] || [[ "$DRYING_ANSWER" =~ ^[Yy]$ ]]; then
+    if [ -n "$OPT_DRYING" ]; then
+        [ "$OPT_DRYING" = "yes" ] && APPLY_DRYING_EXCLUSION=1
+        echo "Drying-state exclusion: $OPT_DRYING (from --drying-exclusion)."
+    elif [ "$ASSUME_YES" -eq 1 ]; then
+        APPLY_DRYING_EXCLUSION=1
+        echo "Applying drying-state exclusion (--yes default)."
+    elif read -p "Apply this modification? (Recommended) (Y/n) " DRYING_ANSWER </dev/tty; \
+         [[ -z "$DRYING_ANSWER" ]] || [[ "$DRYING_ANSWER" =~ ^[Yy]$ ]]; then
         APPLY_DRYING_EXCLUSION=1
     fi
 else
@@ -1140,8 +1540,19 @@ fi
 
 echo ""
 echo "==> Environment Sensor Installation..."
-read -p "Do you want to install the custom AHT10 environment sensor module? (Recommended) (Y/n) " INSTALL_AHT10 </dev/tty
-if [[ -z "$INSTALL_AHT10" ]] || [[ "$INSTALL_AHT10" =~ ^[Yy]$ ]]; then
+if [ -n "$OPT_AHT10" ]; then
+    AHT10_DO="$OPT_AHT10"
+    echo "AHT10 module: $OPT_AHT10 (from --aht10)."
+elif [ "$ASSUME_YES" -eq 1 ]; then
+    AHT10_DO="yes"
+    echo "Installing AHT10 module (--yes default)."
+elif read -p "Do you want to install the custom AHT10 environment sensor module? (Recommended) (Y/n) " INSTALL_AHT10 </dev/tty; \
+     [[ -z "$INSTALL_AHT10" ]] || [[ "$INSTALL_AHT10" =~ ^[Yy]$ ]]; then
+    AHT10_DO="yes"
+else
+    AHT10_DO="no"
+fi
+if [ "$AHT10_DO" = "yes" ]; then
     echo "Installing custom aht10.py module..."
     EXTRAS_DIR="$HOME/klipper/klippy/extras"
     if [ -d "$EXTRAS_DIR" ]; then
