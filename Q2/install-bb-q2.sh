@@ -521,6 +521,13 @@ else
 fi
 
 echo ""
+echo "==> Applying Q2 patched mmu_cut_tip.cfg (overriding Happy Hare default)..."
+cp "$SCRIPT_DIR/$CONFIG_VARIANT/mmu/base/mmu_cut_tip.cfg" \
+   "$CONFIG_DIR/mmu/base/mmu_cut_tip.cfg" \
+   && echo "    mmu_cut_tip.cfg patched." \
+   || echo "    WARNING: Failed to copy mmu_cut_tip.cfg — check permissions."
+
+echo ""
 echo "==> Setting mmu__revision = 0 in saved_variables.cfg"
 # Required by Happy Hare: It looks for 'mmu__revision' in the saved_variables.cfg.
 SV_CFG="$CONFIG_DIR/saved_variables.cfg"
