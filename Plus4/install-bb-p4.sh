@@ -645,11 +645,12 @@ fi
 #
 # Happy Hare's installer re-templates mmu_parameters.cfg and harvests forward the values it finds
 # in the existing file. A parameter that did not exist there yet therefore lands on Happy Hare's
-# default, not ours - so on an upgrade an existing install would keep the classic gate-sensor
-# EndlessSpool behaviour, which cannot unload on the Box (the gear drive loses grip before the hub
-# sensor clears). Seed the Box values here, after HH has written the file, and only when the key is
-# genuinely absent so a deliberate user choice is never overwritten. Appending is safe: the whole
-# file is one [mmu] section, and the next upgrade folds the value into the templated line.
+# default, not ours - so on an upgrade an existing install would keep the classic upstream-sensor
+# EndlessSpool behaviour, which cannot unload on the Box (the tail is through the slot gear before
+# the pre-gate runout can be handled). Seed the Box values here, after HH has written the file, and
+# only when the key is genuinely absent so a deliberate user choice is never overwritten. Appending
+# is safe: the whole file is one [mmu] section, and the next upgrade folds the value into the
+# templated line.
 bb_seed_mmu_parameters() {
     local mp="$CONFIG_DIR/mmu/base/mmu_parameters.cfg"
     if [ ! -f "$mp" ]; then
