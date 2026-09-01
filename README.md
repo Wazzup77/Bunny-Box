@@ -9,6 +9,18 @@ Qidi Box open source makeover using Happy Hare
 
 Bunny Box is the Qidi Box mod that allows you to ditch Qidi's closed-source, proprietary firmware and use [Happy Hare](https://github.com/moggieuk/Happy-Hare/) to control your Box. With added support for Qidi-specific qirks such as the extruder hall sensor and above-extruder cutter placement, this allows Qidi Box use with Freedi and Kalico as well as using non-Qidi multimaterial units with Qidi printers. Strong defaults are provided, but the beauty of Happy Hare is that almost anything can be tweaked!
 
+> ### ⚠️ HAPPY HARE v4 AND BUNNY BOX
+>
+> Happy Hare v4 is out, but **Bunny Box is not on it yet** — it is still based on a fork of Happy
+> Hare **v3**, and that is what all three installers pull.
+>
+> The blocker is Qidi's Klipper: it is based on Klipper **v0.12**, which is too old for v4.
+>
+> * **Running FreeDi?** You are on current Klipper, so Happy Hare v4 will run for you.
+> * **Running Qidi's stock firmware?** Stay on Happy Hare **v3**. v4 will not work on v0.12.
+>
+> Moving Bunny Box to v4 is on the roadmap, but it is gated on the Klipper version underneath.
+
 ## FEATURES
 
  * Open source alternative to Qidi's Box control
