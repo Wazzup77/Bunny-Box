@@ -641,6 +641,54 @@ else
     echo "Error: install.sh not found in Happy-Hare repo!"
 fi
 
+# Bunny Box specific mmu_parameters.cfg defaults.
+#
+# Happy Hare's installer re-templates mmu_parameters.cfg and harvests forward the values it finds
+# in the existing file. A parameter that did not exist there yet therefore lands on Happy Hare's
+# default, not ours - so on an upgrade an existing install would keep the classic gate-sensor
+# EndlessSpool behaviour, which cannot unload on the Box (the gear drive loses grip before the hub
+# sensor clears). Seed the Box values here, after HH has written the file, and only when the key is
+# genuinely absent so a deliberate user choice is never overwritten. Appending is safe: the whole
+# file is one [mmu] section, and the next upgrade folds the value into the templated line.
+bb_seed_mmu_parameters() {
+    local mp="$CONFIG_DIR/mmu/base/mmu_parameters.cfg"
+    if [ ! -f "$mp" ]; then
+        echo "Note: $mp not found; skipping Bunny Box parameter defaults."
+        return 0
+    fi
+
+    local defaults=(
+        "endless_spool_runout_endstop=extruder"
+        "remnant_purge_speed=10"
+        "remnant_purge_step=25"
+        "remnant_purge_max_length=0"
+        "remnant_purge_macro=BOX_PARK_FOR_PURGE"
+    )
+
+    local added=0 entry key val
+    for entry in "${defaults[@]}"; do
+        key="${entry%%=*}"
+        val="${entry#*=}"
+        if grep -qE "^[[:space:]]*${key}[[:space:]]*:" "$mp"; then
+            continue
+        fi
+        if [ "$added" -eq 0 ]; then
+            printf '\n# Bunny Box EndlessSpool defaults (added by the Bunny Box installer)\n' >> "$mp"
+        fi
+        printf '%s: %s\n' "$key" "$val" >> "$mp"
+        echo "    added ${key}: ${val}"
+        added=$((added + 1))
+    done
+
+    if [ "$added" -eq 0 ]; then
+        echo "    all present already, left unchanged"
+    fi
+}
+
+echo ""
+echo "==> Checking Bunny Box EndlessSpool defaults in mmu_parameters.cfg..."
+bb_seed_mmu_parameters
+
 echo ""
 echo "==> Setting mmu__revision = 0 in saved_variables.cfg"
 # Required by Happy Hare: It looks for 'mmu__revision' in the saved_variables.cfg.
