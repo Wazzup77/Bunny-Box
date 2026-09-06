@@ -30,6 +30,8 @@ PRINT_START BED=[bed_temperature_initial_layer_single] HOTEND=[nozzle_temperatur
 SET_PRINT_STATS_INFO TOTAL_LAYER=[total_layer_count]
 M83
 MMU_START_LOAD_INITIAL_TOOL
+MMU_SELECT GATE={initial_tool}
+MMU_LOAD
 M140 S[bed_temperature_initial_layer_single]
 M104 S[nozzle_temperature_initial_layer]
 M141 S[chamber_temperature]
